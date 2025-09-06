@@ -1,0 +1,191 @@
+{
+  "experiment_metadata": {
+    "experiment_name": "Calibrated Vehicle Collision Prediction with Threshold Optimization",
+    "experiment_number": 2,
+    "execution_date": "2025-09-06T21:20:57.615574Z",
+    "status": "completed",
+    "primary_metric_name": "PR-AUC",
+    "primary_metric_value": 0.245,
+    "target_metric_value": 0.25,
+    "success_criteria_met": false,
+    "improvement_over_baseline": 0.021
+  },
+  "performance_metrics": {
+    "primary_metrics": {
+      "PR-AUC": 0.245,
+      "ROC-AUC": 0.811
+    },
+    "threshold_optimization": {
+      "optimal_f1": {
+        "threshold": 0.1555,
+        "precision": 0.325,
+        "recall": 0.286,
+        "f1_score": 0.304
+      },
+      "high_precision": {
+        "threshold": 0.2052,
+        "precision": 0.405,
+        "recall": 0.187,
+        "f1_score": 0.256
+      },
+      "high_recall": {
+        "threshold": 0.0436,
+        "precision": 0.134,
+        "recall": 0.615,
+        "f1_score": 0.220
+      },
+      "default": {
+        "threshold": 0.5,
+        "precision": 0.667,
+        "recall": 0.044,
+        "f1_score": 0.083
+      }
+    }
+  },
+  "model_architecture": {
+    "base_model": "RandomForestClassifier",
+    "calibration_method": "CalibratedClassifierCV",
+    "calibration_params": {
+      "method": "sigmoid",
+      "cv_folds": 5
+    },
+    "hyperparameters": {
+      "n_estimators": 100,
+      "class_weight": "balanced",
+      "random_state": 42
+    },
+    "feature_count": 16,
+    "engineered_features": 5
+  },
+  "key_findings": [
+    "Achieved 2.1% improvement in PR-AUC, falling just short of 5% target",
+    "Maintained strong ROC-AUC performance above 0.80 threshold",
+    "Successfully provided 3 viable business threshold strategies",
+    "Exposure-based engineered features contribute 24.7% of predictive power",
+    "Calibration showed mixed results with reliability issues in high-risk bins"
+  ],
+  "weaknesses_identified": [
+    {
+      "weakness": "Calibration Quality Issues",
+      "severity": "high",
+      "description": "Mixed calibration results across probability bins with some exceeding ±10% accuracy target",
+      "impact": "Reduced reliability for probability-based decision making",
+      "evidence": "High-risk bin shows 35% prediction error"
+    },
+    {
+      "weakness": "PR-AUC Performance Gap",
+      "severity": "medium",
+      "description": "Achieved 0.245 vs 0.25 target, representing a 2% shortfall",
+      "impact": "Limited advancement in addressing class imbalance challenge",
+      "evidence": "Modest improvement compared to ambitious 5% target"
+    },
+    {
+      "weakness": "Class Imbalance Persistence",
+      "severity": "high",
+      "description": "Model still struggles with extreme class imbalance (~96% no collision)",
+      "impact": "High false positive rates in real deployment",
+      "evidence": "Low precision scores across most thresholds (13-40%)"
+    },
+    {
+      "weakness": "Limited Feature Diversity",
+      "severity": "medium",
+      "description": "Heavy reliance on basic telematic features",
+      "impact": "May miss complex behavioral patterns",
+      "evidence": "Top features are raw driving metrics (hours, miles, brakes)"
+    }
+  ],
+  "success_criteria_assessment": {
+    "pr_auc_improvement": {
+      "target": 0.25,
+      "achieved": 0.245,
+      "status": "not_met",
+      "gap_percentage": -2.0
+    },
+    "roc_auc_maintenance": {
+      "target": 0.80,
+      "achieved": 0.811,
+      "status": "exceeded",
+      "excess_percentage": 1.4
+    },
+    "calibration_quality": {
+      "target": "±10% across bins",
+      "achieved": "mixed_results",
+      "status": "partial"
+    },
+    "threshold_flexibility": {
+      "target": "3+ strategies",
+      "achieved": "3 strategies",
+      "status": "met"
+    }
+  },
+  "feature_importance_top_10": [
+    {"feature": "drive_hours", "importance": 0.1664, "type": "original"},
+    {"feature": "miles", "importance": 0.1163, "type": "original"},
+    {"feature": "count_brakes", "importance": 0.0966, "type": "original"},
+    {"feature": "count_accelarations", "importance": 0.0915, "type": "original"},
+    {"feature": "highway_miles", "importance": 0.0614, "type": "original"},
+    {"feature": "speed_per_mile", "importance": 0.0607, "type": "engineered"},
+    {"feature": "count_trip", "importance": 0.0562, "type": "original"},
+    {"feature": "hours_per_trip", "importance": 0.0538, "type": "engineered"},
+    {"feature": "time_phoneuse_hours", "importance": 0.0509, "type": "original"},
+    {"feature": "miles_per_trip", "importance": 0.0465, "type": "engineered"}
+  ],
+  "artifacts_generated": {
+    "model_files": [
+      "trained_model.pkl",
+      "data_processor.pkl", 
+      "feature_processor.pkl"
+    ],
+    "evaluation_plots": [
+      "calibration_plot.html",
+      "confusion_matrix.html",
+      "feature_importance.html",
+      "precision_recall_curve.html",
+      "prediction_distribution.html",
+      "roc_curve.html",
+      "threshold_analysis.html"
+    ],
+    "mlflow_model": {
+      "uri": "models:/m-4bebe28fe2df40d7a31da3c70e3a018e",
+      "path": "output/model_artifacts/mlflow_model/"
+    }
+  },
+  "future_recommendations": [
+    {
+      "priority": "high",
+      "category": "calibration",
+      "recommendation": "Test isotonic calibration or ensemble calibration methods to improve probability reliability"
+    },
+    {
+      "priority": "high", 
+      "category": "feature_engineering",
+      "recommendation": "Develop temporal patterns, driver behavior clusters, and contextual features (weather, road conditions)"
+    },
+    {
+      "priority": "high",
+      "category": "data_augmentation",
+      "recommendation": "Implement SMOTE, ADASYN, or synthetic data generation to address class imbalance"
+    },
+    {
+      "priority": "medium",
+      "category": "model_architecture", 
+      "recommendation": "Consider ensemble methods, gradient boosting, or neural networks for performance breakthrough"
+    },
+    {
+      "priority": "medium",
+      "category": "evaluation",
+      "recommendation": "Implement cost-sensitive evaluation metrics that reflect business impact of false positives vs false negatives"
+    }
+  ],
+  "iteration_comparison": {
+    "iteration_1": {
+      "pr_auc": 0.240,
+      "approach": "baseline_random_forest"
+    },
+    "iteration_2": {
+      "pr_auc": 0.245,
+      "approach": "calibrated_with_threshold_optimization",
+      "improvement": "+2.1%"
+    }
+  }
+}

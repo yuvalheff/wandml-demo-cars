@@ -14,8 +14,7 @@ class DataProcessor(BaseEstimator, TransformerMixin):
     def __init__(self, config: DataConfig):
         self.config: DataConfig = config
         self.numerical_imputer = None
-        self.label_encoder = None
-        self.scaler = None
+        self.month_columns = None
         self.numerical_features = [
             'count_trip', 'miles', 'drive_hours', 'count_brakes', 'count_accelarations',
             'time_speeding_hours', 'time_phoneuse_hours', 'highway_miles', 
@@ -24,7 +23,11 @@ class DataProcessor(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'DataProcessor':
         """
-        Fit the data processor to the data.
+        Fit the data processor to the data according to experiment 3 plan.
+        - Apply mean imputation to numerical features
+        - Apply one-hot encoding to month column  
+        - Convert target to binary classification
+        - Remove driver_id column
 
         Parameters:
         X (pd.DataFrame): The input features.
@@ -39,36 +42,26 @@ class DataProcessor(BaseEstimator, TransformerMixin):
         if 'collisions' in X_copy.columns:
             X_copy['collisions_binary'] = (X_copy['collisions'] > 0).astype(int)
         
-        # Fit numerical imputer
+        # Fit numerical imputer with mean strategy (as per experiment plan)
         numerical_cols = [col for col in self.numerical_features if col in X_copy.columns]
         if numerical_cols:
-            self.numerical_imputer = SimpleImputer(strategy='median')
+            self.numerical_imputer = SimpleImputer(strategy=self.config.imputation_strategy)
             self.numerical_imputer.fit(X_copy[numerical_cols])
         
-        # Fit label encoder for month
+        # Store month columns for one-hot encoding (fit phase)
         if 'month' in X_copy.columns:
-            self.label_encoder = LabelEncoder()
-            self.label_encoder.fit(X_copy['month'].astype(str))
-        
-        # Fit scaler on numerical features (after imputation and infinite replacement)
-        if numerical_cols:
-            X_imputed = X_copy.copy()
-            X_imputed[numerical_cols] = self.numerical_imputer.transform(X_imputed[numerical_cols])
-            
-            # Replace infinite values with NaN, then impute again
-            X_imputed[numerical_cols] = X_imputed[numerical_cols].replace([np.inf, -np.inf], np.nan)
-            if X_imputed[numerical_cols].isnull().any().any():
-                temp_imputer = SimpleImputer(strategy='median')
-                X_imputed[numerical_cols] = temp_imputer.fit_transform(X_imputed[numerical_cols])
-            
-            self.scaler = StandardScaler()
-            self.scaler.fit(X_imputed[numerical_cols])
+            month_dummies = pd.get_dummies(X_copy['month'], prefix='month')
+            self.month_columns = month_dummies.columns.tolist()
         
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Transform the input data based on the preprocessing steps.
+        - Apply mean imputation to numerical features
+        - Apply one-hot encoding to month column creating 12 binary features
+        - Convert target to binary classification using y_binary = (collisions > 0).astype(int)
+        - Remove driver_id column
 
         Parameters:
         X (pd.DataFrame): The input features to transform.
@@ -78,29 +71,34 @@ class DataProcessor(BaseEstimator, TransformerMixin):
         """
         X_transformed = X.copy()
         
+        # Remove driver_id column as specified in experiment plan
+        if 'driver_id' in X_transformed.columns:
+            X_transformed = X_transformed.drop('driver_id', axis=1)
+        
         # Convert multi-class target to binary
         if 'collisions' in X_transformed.columns:
             X_transformed['collisions_binary'] = (X_transformed['collisions'] > 0).astype(int)
         
-        # Apply numerical imputation
+        # Apply numerical imputation with mean strategy
         numerical_cols = [col for col in self.numerical_features if col in X_transformed.columns]
         if numerical_cols and self.numerical_imputer is not None:
             X_transformed[numerical_cols] = self.numerical_imputer.transform(X_transformed[numerical_cols])
         
-        # Apply label encoding to month
-        if 'month' in X_transformed.columns and self.label_encoder is not None:
-            X_transformed['month_encoded'] = self.label_encoder.transform(X_transformed['month'].astype(str))
-        
-        # Replace infinite values with NaN and impute
-        if numerical_cols:
-            X_transformed[numerical_cols] = X_transformed[numerical_cols].replace([np.inf, -np.inf], np.nan)
-            if X_transformed[numerical_cols].isnull().any().any():
-                temp_imputer = SimpleImputer(strategy='median')
-                X_transformed[numerical_cols] = temp_imputer.fit_transform(X_transformed[numerical_cols])
-        
-        # Apply scaling to numerical features
-        if numerical_cols and self.scaler is not None:
-            X_transformed[numerical_cols] = self.scaler.transform(X_transformed[numerical_cols])
+        # Apply one-hot encoding to month column
+        if 'month' in X_transformed.columns:
+            month_dummies = pd.get_dummies(X_transformed['month'], prefix='month')
+            
+            # Ensure all expected month columns are present (in case some months missing in transform data)
+            if self.month_columns is not None:
+                for col in self.month_columns:
+                    if col not in month_dummies.columns:
+                        month_dummies[col] = 0
+                # Reorder columns to match training
+                month_dummies = month_dummies[self.month_columns]
+            
+            # Drop original month column and add dummy columns
+            X_transformed = X_transformed.drop('month', axis=1)
+            X_transformed = pd.concat([X_transformed, month_dummies], axis=1)
         
         return X_transformed
 

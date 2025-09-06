@@ -28,7 +28,6 @@ class Experiment:
     def _set_seed(self, seed: int):
         """Set random seeds for reproducibility"""
         np.random.seed(seed)
-        # Also set sklearn random state if needed
 
     def _load_data(self, train_path: str, test_path: str) -> tuple:
         """Load training and test datasets"""
@@ -43,125 +42,104 @@ class Experiment:
         return train_data, test_data
 
     def _prepare_data(self, train_data: pd.DataFrame, test_data: pd.DataFrame) -> tuple:
-        """Prepare features and targets"""
+        """Prepare features and targets according to experiment 3 plan"""
         # Initialize and fit data processor on training data
         print("🔧 Initializing and fitting data processor...")
         self.data_processor = DataProcessor(self._config.data_prep)
         
-        # Fit on training data
-        train_processed = self.data_processor.fit_transform(train_data)
-        test_processed = self.data_processor.transform(test_data)
+        # Transform training data
+        X_train_processed = self.data_processor.fit_transform(train_data)
+        y_train = (train_data['collisions'] > 0).astype(int)  # Binary target
         
-        # Initialize and fit feature processor
-        print("🔧 Initializing and fitting feature processor...")
-        self.feature_processor = FeatureProcessor(self._config.feature_prep)
+        # Transform test data
+        X_test_processed = self.data_processor.transform(test_data)
+        y_test = (test_data['collisions'] > 0).astype(int)  # Binary target
         
-        # Apply feature engineering
-        train_features = self.feature_processor.fit_transform(train_processed)
-        test_features = self.feature_processor.transform(test_processed)
+        print("🔧 Initializing and fitting feature processor with SelectKBest...")
+        self.feature_processor = FeatureProcessor(self._config.feature_prep, 
+                                                  n_features_select=self._config.model.n_features_select)
         
-        # Prepare target variable (binary)
-        y_train = train_features['collisions_binary'].values
-        y_test = test_features['collisions_binary'].values
+        # Fit feature processor on training data (requires target for SelectKBest)
+        X_train_features = self.feature_processor.fit_transform(X_train_processed, y_train)
         
-        # Prepare numeric features for modeling (exclude non-feature columns and non-numeric)
-        feature_cols = [col for col in train_features.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary', 'month']]
+        # Transform test data
+        X_test_features = self.feature_processor.transform(X_test_processed)
         
-        X_train = train_features[feature_cols].select_dtypes(include=[np.number])
-        X_test = test_features[feature_cols].select_dtypes(include=[np.number])
+        print(f"✅ Training features shape after preprocessing: {X_train_features.shape}")
+        print(f"✅ Test features shape after preprocessing: {X_test_features.shape}")
+        print(f"✅ Selected features: {self.feature_processor.selected_features}")
         
-        print(f"✅ Training features shape: {X_train.shape}")
-        print(f"✅ Training target distribution: {np.bincount(y_train)}")
-        print(f"✅ Test features shape: {X_test.shape}")
-        print(f"✅ Test target distribution: {np.bincount(y_test)}")
-        
-        return X_train, X_test, y_train, y_test
+        return X_train_features, X_test_features, y_train, y_test
 
-    def _train_model(self, X_train: pd.DataFrame, y_train: np.ndarray) -> None:
-        """Train the model with optional calibration"""
-        print("🏋️ Training model...")
+    def _train_model(self, X_train: pd.DataFrame, y_train: pd.Series) -> None:
+        """Train the model according to experiment 3 specifications"""
+        print("🚀 Training RandomForest model (no class balancing)...")
         
-        # Initialize model with calibration settings
-        calibrate = getattr(self._config.model_evaluation, 'calibrate_probabilities', False)
-        calibration_method = getattr(self._config.model_evaluation, 'calibration_method', 'sigmoid')
+        # Exclude target columns from training features
+        feature_cols = [col for col in X_train.columns 
+                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+        X_train_clean = X_train[feature_cols].select_dtypes(include=[np.number])
         
-        self.model = ModelWrapper(
-            self._config.model,
-            calibrate=calibrate,
-            calibration_method=calibration_method
-        )
+        print(f"🔧 Training on {X_train_clean.shape[1]} features: {list(X_train_clean.columns)}")
         
-        # Train model (with calibration if enabled)
-        self.model.fit(X_train, y_train)
-        
-        if calibrate:
-            print(f"✅ Model training completed with {calibration_method} calibration")
-        else:
-            print("✅ Model training completed")
+        self.model = ModelWrapper(self._config.model)
+        self.model.fit(X_train_clean, y_train)
+        print("✅ Model training completed!")
 
-    def _evaluate_model(self, X_test: pd.DataFrame, y_test: np.ndarray, output_dir: str) -> Dict[str, Any]:
-        """Evaluate the model and generate plots with threshold optimization"""
-        print("📊 Evaluating model...")
+    def _evaluate_model(self, X_test: pd.DataFrame, y_test: pd.Series, output_dir: str) -> Dict[str, Any]:
+        """Evaluate model and generate plots"""
+        print("📊 Evaluating model performance...")
+        
+        # Exclude target columns from test features (same as training)
+        feature_cols = [col for col in X_test.columns 
+                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+        X_test_clean = X_test[feature_cols].select_dtypes(include=[np.number])
         
         # Make predictions
-        y_pred = self.model.predict(X_test)
-        y_pred_proba = self.model.predict_proba(X_test)
+        y_pred = self.model.predict(X_test_clean)
+        y_pred_proba = self.model.predict_proba(X_test_clean)
         
         # Initialize evaluator
         evaluator = ModelEvaluator(self._config.model_evaluation)
         
-        # Calculate base metrics
+        # Get comprehensive metrics
         metrics = evaluator.evaluate_model(y_test, y_pred, y_pred_proba)
         
-        # Threshold optimization if enabled
-        if getattr(self._config.model_evaluation, 'threshold_optimization', False):
-            print("🎯 Performing threshold optimization...")
-            threshold_strategies = getattr(self._config.model_evaluation, 'threshold_strategies', ['optimal_f1'])
-            threshold_results = {}
-            
-            for strategy in threshold_strategies:
-                optimal_threshold, threshold_metrics = evaluator.optimize_threshold(
-                    y_test, y_pred_proba, strategy=strategy
-                )
-                threshold_results[strategy] = {
-                    'threshold': optimal_threshold,
-                    'metrics': threshold_metrics
-                }
-                print(f"✅ {strategy}: threshold={optimal_threshold:.3f}, "
-                      f"precision={threshold_metrics['precision']:.3f}, "
-                      f"recall={threshold_metrics['recall']:.3f}, "
-                      f"f1={threshold_metrics['f1_score']:.3f}")
-            
-            metrics['threshold_optimization'] = threshold_results
-        
-        # Generate plots
+        # Create output directory for plots
         plots_dir = os.path.join(output_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
         
-        # Get feature importance if available
-        feature_importance = self.model.get_feature_importance()
-        feature_names = list(X_test.columns) if feature_importance is not None else None
+        # Generate evaluation plots
+        print("📈 Generating evaluation plots...")
+        plot_files = []
         
-        plot_files = evaluator.generate_all_plots(
-            y_test, y_pred, y_pred_proba,
-            feature_names=feature_names,
-            feature_importance=feature_importance,
-            output_dir=plots_dir
-        )
+        try:
+            plot_files.append(evaluator.create_pr_curve_plot(y_test, y_pred_proba, plots_dir))
+            plot_files.append(evaluator.create_roc_curve_plot(y_test, y_pred_proba, plots_dir))
+            plot_files.append(evaluator.create_confusion_matrix_plot(y_test, y_pred, plots_dir))
+            
+            # Feature importance plot if available
+            feature_importance = self.model.get_feature_importance()
+            if feature_importance is not None:
+                feature_names = list(X_test_clean.columns)
+                plot_files.append(evaluator.create_feature_importance_plot(feature_names, feature_importance, plots_dir))
+            
+            plot_files.append(evaluator.create_threshold_analysis_plot(y_test, y_pred_proba, plots_dir))
+        except Exception as e:
+            print(f"⚠️ Warning: Some plots could not be generated: {e}")
         
-        # Add threshold analysis plot if optimization was performed
-        if getattr(self._config.model_evaluation, 'threshold_optimization', False):
-            plot_files['threshold_analysis'] = evaluator.create_threshold_analysis_plot(
-                y_test, y_pred_proba, plots_dir
-            )
+        metrics['plot_files'] = plot_files
         
-        print(f"✅ Generated evaluation plots in: {plots_dir}")
-        print(f"📈 Primary metric (PR-AUC): {metrics['pr_auc']:.4f}")
+        print(f"✅ Primary metric (PR-AUC): {metrics['pr_auc']:.4f}")
+        print(f"✅ ROC-AUC: {metrics['roc_auc']:.4f}")
+        print(f"✅ F1-Score: {metrics['f1_score']:.4f}")
         
-        return metrics, plot_files
+        return metrics
 
     def _save_artifacts(self, output_dir: str) -> list:
         """Save model artifacts"""
+        print("💾 Saving model artifacts...")
+        
         artifacts_dir = os.path.join(output_dir, "model_artifacts")
         os.makedirs(artifacts_dir, exist_ok=True)
         
@@ -176,17 +154,16 @@ class Experiment:
         self.feature_processor.save(feature_processor_path)
         artifact_files.append("feature_processor.pkl")
         
-        model_path = os.path.join(artifacts_dir, "trained_model.pkl")
+        model_path = os.path.join(artifacts_dir, "trained_models.pkl")
         self.model.save(model_path)
-        artifact_files.append("trained_model.pkl")
+        artifact_files.append("trained_models.pkl")
         
-        print(f"✅ Saved model artifacts to: {artifacts_dir}")
-        
+        print(f"✅ Saved {len(artifact_files)} model artifacts")
         return artifact_files
 
-    def _create_pipeline(self, X_sample: pd.DataFrame) -> Dict[str, Any]:
-        """Create and save MLflow model pipeline"""
-        print("🔗 Creating model pipeline...")
+    def _create_mlflow_pipeline(self, X_sample: pd.DataFrame, X_train_features: pd.DataFrame) -> Dict[str, Any]:
+        """Create MLflow model pipeline and save/log it"""
+        print("🔧 Creating MLflow model pipeline...")
         
         # Create pipeline with fitted components
         self.pipeline = ModelPipeline(
@@ -196,125 +173,108 @@ class Experiment:
             config=self._config
         )
         
-        # Test pipeline with sample data to ensure it works
-        print("🧪 Testing pipeline with sample data...")
-        sample_predictions = self.pipeline.predict(X_sample.head(2))
-        sample_probabilities = self.pipeline.predict_proba(X_sample.head(2))
-        print(f"✅ Pipeline test successful - sample predictions: {sample_predictions}")
+        # Initialize feature columns from training data to ensure consistency
+        feature_cols = [col for col in X_train_features.columns 
+                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+        training_features = X_train_features[feature_cols].select_dtypes(include=[np.number])
+        self.pipeline.feature_columns = list(training_features.columns)
         
-        # Define paths - MUST use experiment_2 directory
-        output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_2/output/model_artifacts/mlflow_model/"
-        relative_path_for_return = "output/model_artifacts/mlflow_model/"
+        # Test pipeline end-to-end with processed sample that matches training format
+        print("🧪 Testing pipeline end-to-end...")
+        sample_pred = self.pipeline.predict(X_sample)
+        sample_proba = self.pipeline.predict_proba(X_sample)
+        print(f"✅ Pipeline test successful - predictions: {sample_pred[:3]}")
         
-        # Create sample input for signature
-        sample_input = X_sample.head(1)
-        sample_output = self.pipeline.predict(sample_input)
+        # Define paths
+        base_output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_3/output/model_artifacts/mlflow_model/"
+        relative_path = "output/model_artifacts/mlflow_model/"
         
         # Create signature
-        signature = mlflow.models.infer_signature(sample_input, sample_output)
+        signature = mlflow.models.infer_signature(X_sample, sample_pred)
         
-        # 1. Always save the model to the local path for harness validation
-        print(f"💾 Saving model to local disk for harness: {output_path}")
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+        # Always save locally
+        print(f"💾 Saving model to local disk: {base_output_path}")
         mlflow.sklearn.save_model(
             self.pipeline,
-            path=output_path,
-            code_paths=["vehicle_collision_prediction"],  # Bundle the custom code
+            path=base_output_path,
+            code_paths=["vehicle_collision_prediction"],
             signature=signature
         )
         
-        # 2. If an MLflow run ID is provided, reconnect and log the model as an artifact
-        active_run_id = "15a25ee2eedc41ffae4d66f75d6437e3"
-        logged_model_uri = None  # Initialize to None
+        # Conditionally log to MLflow if run ID available
+        logged_model_uri = None
+        active_run_id = "771f363fd0da40d0b7f59349952caed2"
         
         if active_run_id and active_run_id != 'None' and active_run_id.strip():
-            print(f"✅ Active MLflow run ID '{active_run_id}' detected. Reconnecting to log model as an artifact.")
+            print(f"✅ Active MLflow run ID '{active_run_id}' detected. Reconnecting to log model.")
             try:
                 with mlflow.start_run(run_id=active_run_id):
                     logged_model_info = mlflow.sklearn.log_model(
                         self.pipeline,
-                        artifact_path="model",  # Use a standard artifact path
-                        code_paths=["vehicle_collision_prediction"],  # Bundle the custom code
+                        artifact_path="model",
+                        code_paths=["vehicle_collision_prediction"],
                         signature=signature
                     )
                     logged_model_uri = logged_model_info.model_uri
+                    print(f"✅ Model logged to MLflow: {logged_model_uri}")
             except Exception as e:
-                print(f"⚠️ Warning: Could not log model to MLflow run: {e}")
+                print(f"⚠️ Warning: Could not log to MLflow: {e}")
         else:
             print("ℹ️ No active MLflow run ID provided. Skipping model logging.")
         
-        # Prepare model info for return
-        mlflow_model_info = {
-            "model_path": relative_path_for_return,
+        # Return model info
+        return {
+            "model_path": relative_path,
             "logged_model_uri": logged_model_uri,
             "model_type": "sklearn",
-            "task_type": "classification",
-            "signature": signature.to_dict() if signature else None,
-            "input_example": sample_input.to_dict('records')[0],
+            "task_type": "classification", 
+            "signature": {
+                "inputs": signature.inputs.to_dict() if signature else None,
+                "outputs": signature.outputs.to_dict() if signature else None
+            },
             "framework_version": sklearn.__version__
         }
-        
-        print("✅ MLflow model pipeline created and saved")
-        
-        return mlflow_model_info
 
     def run(self, train_dataset_path: str, test_dataset_path: str, output_dir: str, seed: int = 42) -> Dict[str, Any]:
         """
-        Run the complete experiment pipeline.
-        
-        Parameters:
-        train_dataset_path: Path to training data
-        test_dataset_path: Path to test data  
-        output_dir: Directory to save outputs
-        seed: Random seed for reproducibility
+        Run complete experiment according to experiment 3 plan
         
         Returns:
-        Dict containing experiment results
+        Dict with mandatory format including mlflow_model_info
         """
-        print("🚀 Starting Vehicle Collision Prediction Experiment")
-        print(f"📁 Output directory: {output_dir}")
-        
-        # Set seed for reproducibility
-        self._set_seed(seed)
-        
-        # Create output directories
-        os.makedirs(output_dir, exist_ok=True)
-        os.makedirs(os.path.join(output_dir, "general_artifacts"), exist_ok=True)
-        
         try:
-            # 1. Load data
+            print("🎯 Starting Experiment 3: Feature Selection Enhanced Vehicle Collision Prediction")
+            
+            # Set seed for reproducibility
+            self._set_seed(seed)
+            
+            # Load data
             train_data, test_data = self._load_data(train_dataset_path, test_dataset_path)
             
-            # 2. Prepare data (preprocessing + feature engineering)
+            # Prepare data with preprocessing and feature selection
             X_train, X_test, y_train, y_test = self._prepare_data(train_data, test_data)
             
-            # 3. Train model
+            # Train model
             self._train_model(X_train, y_train)
             
-            # 4. Evaluate model
-            metrics, plot_files = self._evaluate_model(X_test, y_test, output_dir)
+            # Evaluate model
+            metrics = self._evaluate_model(X_test, y_test, output_dir)
             
-            # 5. Save artifacts
-            artifact_files = self._save_artifacts(output_dir)
+            # Save individual artifacts
+            model_artifacts = self._save_artifacts(output_dir)
             
-            # 6. Create MLflow pipeline
-            # Use original test data (before processing) for pipeline testing
-            mlflow_model_info = self._create_pipeline(test_data)
+            # Create and save MLflow pipeline
+            mlflow_model_info = self._create_mlflow_pipeline(train_data.head(3), X_train)
             
-            # Prepare results
-            results = {
-                "metric_name": "PR-AUC",
-                "metric_value": metrics["pr_auc"],
-                "model_artifacts": artifact_files,
+            print("🎉 Experiment completed successfully!")
+            
+            return {
+                "metric_name": self._config.model_evaluation.evaluation_metric,
+                "metric_value": metrics['pr_auc'],
+                "model_artifacts": model_artifacts,
                 "mlflow_model_info": mlflow_model_info
             }
             
-            print("🎉 Experiment completed successfully!")
-            print(f"📊 Final PR-AUC: {metrics['pr_auc']:.4f}")
-            
-            return results
-            
         except Exception as e:
-            print(f"❌ Experiment failed with error: {str(e)}")
+            print(f"❌ Experiment failed: {str(e)}")
             raise

@@ -1,6 +1,6 @@
 data_prep:
-  version: "2.0"
-  dataset_name: "vehicle_collision_prediction_calibrated"
+  version: "3.0"
+  dataset_name: "vehicle_collision_prediction_feature_selection"
   target_column: "collisions"
   binary_target_column: "collisions_binary"
   numerical_features: 
@@ -16,18 +16,18 @@ data_prep:
     - "maximum_speed"
   categorical_features:
     - "month"
-  imputation_strategy: "median"
+  imputation_strategy: "mean"
   
 feature_prep:
   create_engineered_features: true
-  eps_value: 1.0e-8
+  eps_value: 1.0e-6
 
 model_evaluation:
   split_ratio: 0.2
   evaluation_metric: "PR-AUC"
   cv_folds: 5
   stratify: true
-  calibrate_probabilities: true
+  calibrate_probabilities: false
   calibration_method: "sigmoid"
   threshold_optimization: true
   threshold_strategies:
@@ -38,10 +38,13 @@ model_evaluation:
 model:
   model_type: "RandomForest"
   model_params:
-    n_estimators: 100
-    class_weight: "balanced"
+    n_estimators: 200
     random_state: 42
-  n_features_select: null
+    max_depth: null
+    min_samples_split: 5
+    min_samples_leaf: 2
+    n_jobs: -1
+  n_features_select: 15
   hyperparameter_tuning: false
 
 

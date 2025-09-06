@@ -17,35 +17,32 @@ except ImportError:
 
 
 class ModelWrapper:
-    def __init__(self, config: ModelConfig, calibrate: bool = False, calibration_method: str = "sigmoid"):
+    def __init__(self, config: ModelConfig):
         self.config: ModelConfig = config
         self.model = None
-        self.calibrated_model = None
-        self.feature_selector = None
-        self.calibrate = calibrate
-        self.calibration_method = calibration_method
         self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize model based on configuration"""
+        """Initialize model based on configuration - experiment 3: no class balancing"""
         if self.config.model_type == "RandomForest":
             self.model = RandomForestClassifier(**self.config.model_params)
         elif self.config.model_type == "XGBoost" and XGBClassifier is not None:
             self.model = XGBClassifier(**self.config.model_params)
         else:
-            # Default to RandomForest with balanced class weights
+            # Default to RandomForest with experiment 3 parameters (NO class balancing)
             self.model = RandomForestClassifier(
                 n_estimators=200,
-                max_depth=12,
+                random_state=42,
+                max_depth=None,
                 min_samples_split=5,
                 min_samples_leaf=2,
-                class_weight='balanced',
-                random_state=42
+                n_jobs=-1
             )
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
         """
         Fit the classifier to the training data.
+        Experiment 3: No calibration, feature selection handled in FeatureProcessor.
 
         Parameters:
         X: Training features.
@@ -57,29 +54,8 @@ class ModelWrapper:
         # Ensure we only use numeric features for modeling
         numeric_features = X.select_dtypes(include=[np.number])
         
-        # Feature selection - select top K features based on config or use all
-        n_features_to_select = getattr(self.config, 'n_features_select', None)
-        if n_features_to_select and n_features_to_select < numeric_features.shape[1]:
-            self.feature_selector = SelectKBest(score_func=f_classif, k=n_features_to_select)
-            X_selected = self.feature_selector.fit_transform(numeric_features, y)
-        else:
-            X_selected = numeric_features
-        
-        # Fit the base model
-        self.model.fit(X_selected, y)
-        
-        # Apply calibration if requested
-        if self.calibrate:
-            # Use fewer splits for small samples, full 5-fold for larger samples
-            n_samples_per_class = min(np.bincount(y))
-            n_splits = min(5, max(2, n_samples_per_class))
-            
-            self.calibrated_model = CalibratedClassifierCV(
-                estimator=self.model,
-                method=self.calibration_method,
-                cv=StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-            )
-            self.calibrated_model.fit(X_selected, y)
+        # Fit the model directly (feature selection handled in FeatureProcessor)
+        self.model.fit(numeric_features, y)
         
         return self
 
@@ -99,17 +75,7 @@ class ModelWrapper:
         # Ensure we only use numeric features for modeling
         numeric_features = X.select_dtypes(include=[np.number])
         
-        # Apply feature selection if it was used during training
-        if self.feature_selector is not None:
-            X_selected = self.feature_selector.transform(numeric_features)
-        else:
-            X_selected = numeric_features
-        
-        # Use calibrated model if available
-        if self.calibrated_model is not None:
-            return self.calibrated_model.predict(X_selected)
-        else:
-            return self.model.predict(X_selected)
+        return self.model.predict(numeric_features)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """
@@ -127,17 +93,7 @@ class ModelWrapper:
         # Ensure we only use numeric features for modeling
         numeric_features = X.select_dtypes(include=[np.number])
         
-        # Apply feature selection if it was used during training
-        if self.feature_selector is not None:
-            X_selected = self.feature_selector.transform(numeric_features)
-        else:
-            X_selected = numeric_features
-        
-        # Use calibrated model if available
-        if self.calibrated_model is not None:
-            return self.calibrated_model.predict_proba(X_selected)
-        else:
-            return self.model.predict_proba(X_selected)
+        return self.model.predict_proba(numeric_features)
 
     def get_feature_importance(self) -> Optional[np.ndarray]:
         """

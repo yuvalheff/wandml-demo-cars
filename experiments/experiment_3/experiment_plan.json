@@ -1,0 +1,200 @@
+{
+  "experiment_name": "Feature Selection Enhanced Vehicle Collision Prediction",
+  "experiment_description": "Advanced feature selection and engineering approach to improve PR-AUC performance beyond the 0.245 baseline through systematic feature selection using SelectKBest with F-score ranking.",
+  "task_type": "Binary Classification",
+  "target_column": "collisions",
+  "target_transformation": "Convert multi-class target to binary (0: no collision, 1: collision occurred)",
+  "primary_evaluation_metric": "PR-AUC",
+  "secondary_evaluation_metrics": ["ROC-AUC", "Precision", "Recall", "F1-Score"],
+  
+  "data_preprocessing": {
+    "missing_value_handling": {
+      "method": "mean_imputation",
+      "columns": ["count_trip", "miles", "drive_hours", "count_brakes", "count_accelarations", "time_speeding_hours", "time_phoneuse_hours", "highway_miles", "night_drive_hrs", "maximum_speed"],
+      "details": "Fill missing values with column means using pandas fillna(df.mean())"
+    },
+    "categorical_encoding": {
+      "method": "one_hot_encoding",
+      "columns": ["month"],
+      "details": "Apply pd.get_dummies() to month column to create 12 binary features"
+    },
+    "target_transformation": {
+      "method": "binary_conversion",
+      "details": "Convert collisions column: y_binary = (y > 0).astype(int) to create binary classification problem"
+    },
+    "column_removal": {
+      "columns": ["driver_id"],
+      "reason": "High-cardinality identifier with no predictive value for collision prediction"
+    }
+  },
+  
+  "feature_engineering": {
+    "exposure_based_features": [
+      {
+        "feature_name": "miles_per_trip",
+        "formula": "miles / (count_trip + 1e-6)",
+        "rationale": "Average distance per trip indicates driving behavior intensity"
+      },
+      {
+        "feature_name": "hours_per_trip", 
+        "formula": "drive_hours / (count_trip + 1e-6)",
+        "rationale": "Average time per trip indicates trip complexity and duration patterns"
+      },
+      {
+        "feature_name": "brakes_per_mile",
+        "formula": "count_brakes / (miles + 1e-6)", 
+        "rationale": "Braking intensity normalized by exposure distance"
+      },
+      {
+        "feature_name": "accel_per_mile",
+        "formula": "count_accelarations / (miles + 1e-6)",
+        "rationale": "Acceleration intensity normalized by exposure distance"
+      },
+      {
+        "feature_name": "speed_per_mile",
+        "formula": "maximum_speed / (miles + 1e-6)",
+        "rationale": "Speed behavior normalized by driving exposure"
+      }
+    ],
+    "feature_selection": {
+      "method": "SelectKBest",
+      "scoring_function": "f_classif",
+      "k": 15,
+      "rationale": "Systematic testing showed optimal performance with top 15 features (PR-AUC: 0.288)",
+      "expected_selected_features": [
+        "drive_hours", "miles", "count_trip", "count_brakes", "count_accelarations",
+        "hours_per_trip", "miles_per_trip", "highway_miles", "maximum_speed", 
+        "time_speeding_hours", "month_Nov-22", "month_Aug-22", "night_drive_hrs",
+        "month_Oct-22", "month_Apr-22"
+      ]
+    }
+  },
+  
+  "model_configuration": {
+    "algorithm": "RandomForestClassifier",
+    "parameters": {
+      "n_estimators": 200,
+      "random_state": 42,
+      "max_depth": null,
+      "min_samples_split": 5,
+      "min_samples_leaf": 2,
+      "n_jobs": -1
+    },
+    "class_imbalance_handling": "none",
+    "rationale": "Exploration experiments showed that natural class distribution preserves important signal better than artificial balancing techniques"
+  },
+  
+  "evaluation_strategy": {
+    "cross_validation": {
+      "method": "StratifiedKFold",
+      "n_splits": 5,
+      "shuffle": true,
+      "random_state": 42
+    },
+    "primary_metric": {
+      "name": "PR-AUC",
+      "target_value": 0.290,
+      "improvement_over_baseline": "18% improvement from 0.245"
+    },
+    "threshold_optimization": {
+      "strategies": [
+        {
+          "name": "optimal_f1",
+          "objective": "Maximize F1-score for balanced precision-recall performance"
+        },
+        {
+          "name": "high_precision", 
+          "objective": "Target precision ≥ 0.40 to minimize false alarms"
+        },
+        {
+          "name": "high_recall",
+          "objective": "Target recall ≥ 0.60 for safety-critical collision detection"
+        }
+      ]
+    },
+    "diagnostic_analyses": [
+      {
+        "analysis_type": "feature_importance",
+        "method": "RandomForest feature_importances_",
+        "purpose": "Validate that selected features contribute meaningfully to predictions"
+      },
+      {
+        "analysis_type": "precision_recall_analysis",
+        "method": "precision_recall_curve with multiple thresholds",
+        "purpose": "Understand precision-recall trade-offs and optimal operating points"
+      },
+      {
+        "analysis_type": "roc_analysis", 
+        "method": "roc_curve and roc_auc_score",
+        "purpose": "Assess overall discrimination ability between collision and non-collision cases"
+      },
+      {
+        "analysis_type": "confusion_matrix_analysis",
+        "method": "confusion_matrix at optimal thresholds",
+        "purpose": "Quantify false positive and false negative rates for business impact assessment"
+      },
+      {
+        "analysis_type": "prediction_distribution",
+        "method": "histogram of predicted probabilities by class",
+        "purpose": "Understand model confidence patterns and potential calibration needs"
+      }
+    ]
+  },
+  
+  "expected_outputs": {
+    "model_artifacts": [
+      "trained_model.pkl (RandomForest model with feature selection pipeline)",
+      "feature_selector.pkl (SelectKBest transformer fitted on training data)",
+      "feature_importance.json (feature importance scores and rankings)"
+    ],
+    "evaluation_reports": [
+      "performance_metrics.json (all metrics including PR-AUC, ROC-AUC, precision, recall)",
+      "threshold_analysis.json (optimal thresholds for different business strategies)",
+      "cross_validation_results.json (detailed CV scores and confidence intervals)"
+    ],
+    "visualizations": [
+      "precision_recall_curve.html (interactive PR curve with threshold annotations)",
+      "roc_curve.html (ROC curve with AUC score)",
+      "feature_importance_plot.html (feature importance ranking visualization)",
+      "confusion_matrix_heatmap.html (confusion matrices for different thresholds)",
+      "prediction_distribution.html (histogram of prediction probabilities)"
+    ],
+    "analysis_reports": [
+      "experiment_summary.md (comprehensive analysis of results and business implications)",
+      "model_performance_analysis.md (detailed performance breakdown and comparisons)",
+      "feature_analysis.md (selected features analysis and engineering impact)"
+    ]
+  },
+  
+  "success_criteria": {
+    "primary": "Achieve PR-AUC ≥ 0.280 (14.3% improvement over 0.245 baseline)",
+    "secondary": [
+      "Maintain ROC-AUC ≥ 0.810 (preserve discrimination ability)",
+      "Provide actionable threshold recommendations for three business scenarios",
+      "Generate comprehensive feature importance analysis validating selection approach"
+    ]
+  },
+  
+  "implementation_notes": {
+    "data_paths": {
+      "train": "data/train_set.csv",
+      "test": "data/test_set.csv"
+    },
+    "key_implementation_steps": [
+      "1. Load training data and apply preprocessing pipeline (missing values, encoding)",
+      "2. Create 5 exposure-based engineered features using specified formulas", 
+      "3. Apply SelectKBest with k=15 and f_classif scoring to select optimal feature subset",
+      "4. Train RandomForest with 200 estimators on selected features",
+      "5. Perform 5-fold stratified cross-validation for robust performance estimation",
+      "6. Optimize thresholds for three business strategies (F1, precision, recall)",
+      "7. Generate comprehensive evaluation visualizations and reports",
+      "8. Package model artifacts for deployment readiness"
+    ],
+    "critical_considerations": [
+      "Ensure feature selection is fit only on training data to prevent data leakage",
+      "Apply same preprocessing and feature selection pipeline to test data",
+      "Use stratified CV to maintain class distribution in each fold",
+      "Generate interactive visualizations for business stakeholder communication"
+    ]
+  }
+}
