@@ -1,20 +1,44 @@
 data_prep:
-  dataset: "name"
-  version: "version"
-  dataset_name: "dataset_name"
-  placeholder: "placeholder"
+  version: "1.0"
+  dataset_name: "vehicle_collision_prediction"
+  target_column: "collisions"
+  binary_target_column: "collisions_binary"
+  numerical_features: 
+    - "count_trip"
+    - "miles"
+    - "drive_hours"
+    - "count_brakes"
+    - "count_accelarations"
+    - "time_speeding_hours"
+    - "time_phoneuse_hours"
+    - "highway_miles"
+    - "night_drive_hrs"
+    - "maximum_speed"
+  categorical_features:
+    - "month"
+  imputation_strategy: "median"
   
 feature_prep:
-  placeholder: "placeholder"
+  create_engineered_features: true
+  eps_value: 1.0e-6
 
 model_evaluation:
-    split_ratio: 0.2
-    placeholder: "placeholder"
+  split_ratio: 0.2
+  evaluation_metric: "average_precision"
+  cv_folds: 5
+  stratify: true
 
 model:
-    model_type: "model_type"
-    model_params: Dict[str, Any]
-    placeholder: "placeholder"
+  model_type: "RandomForest"
+  model_params:
+    n_estimators: 200
+    max_depth: 12
+    min_samples_split: 5
+    min_samples_leaf: 2
+    class_weight: "balanced"
+    random_state: 42
+  n_features_select: 15
+  hyperparameter_tuning: false
 
 
 

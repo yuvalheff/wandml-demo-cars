@@ -1,0 +1,251 @@
+{
+  "experiment_name": "Vehicle Collision Prediction - Binary Classification with Exposure-Based Features",
+  "experiment_id": "experiment_1",
+  "task_type": "Binary Classification",
+  "target_column": "collisions_binary",
+  "evaluation_metric": "PR-AUC",
+  "dataset_info": {
+    "train_path": "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/data/train_set.csv",
+    "test_path": "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/data/test_set.csv",
+    "train_records": 7667,
+    "test_records": 1917
+  },
+  "preprocessing_steps": [
+    {
+      "step": 1,
+      "name": "Target Variable Transformation",
+      "description": "Convert multi-class target 'collisions' (0,1,2) to binary 'collisions_binary' where 0->0 (no collision) and 1,2->1 (collision occurred)",
+      "implementation": "collisions_binary = (collisions > 0).astype(int)"
+    },
+    {
+      "step": 2,
+      "name": "Missing Value Imputation", 
+      "description": "Apply median imputation to handle missing values. Most features have 55 missing values (0.72%), time_phoneuse_hours has 1025 missing (13.4%)",
+      "columns": ["count_trip", "miles", "drive_hours", "count_brakes", "count_accelarations", "time_speeding_hours", "time_phoneuse_hours", "highway_miles", "night_drive_hrs", "maximum_speed"],
+      "strategy": "median",
+      "implementation": "SimpleImputer(strategy='median')"
+    },
+    {
+      "step": 3,
+      "name": "Categorical Encoding",
+      "description": "Apply label encoding to month variable (12 unique values: Jan-22 to Dec-22)",
+      "columns": ["month"],
+      "method": "LabelEncoder",
+      "implementation": "LabelEncoder().fit_transform(month)"
+    },
+    {
+      "step": 4,
+      "name": "Infinite Values Handling",
+      "description": "Replace infinite values created during feature engineering with NaN, then impute",
+      "implementation": "replace([np.inf, -np.inf], np.nan)"
+    },
+    {
+      "step": 5,
+      "name": "Feature Scaling",
+      "description": "Apply standard scaling to normalize all numerical features for consistent model input",
+      "method": "StandardScaler",
+      "implementation": "StandardScaler().fit_transform()"
+    }
+  ],
+  "feature_engineering_steps": [
+    {
+      "step": 1,
+      "name": "Exposure-Based Features",
+      "description": "Create features that capture driving exposure patterns, which are strongly correlated with collision risk",
+      "features": [
+        {
+          "name": "miles_per_trip",
+          "formula": "miles / (count_trip + 1e-6)",
+          "rationale": "Average trip length - longer trips may indicate highway driving or commuting patterns"
+        },
+        {
+          "name": "hours_per_trip", 
+          "formula": "drive_hours / (count_trip + 1e-6)",
+          "rationale": "Average trip duration - indicates driving behavior patterns"
+        },
+        {
+          "name": "avg_speed",
+          "formula": "miles / (drive_hours + 1e-6)",
+          "rationale": "Overall average speed - indicates driving environment (city vs highway)"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "name": "Risk Behavior Ratios",
+      "description": "Normalize risky driving behaviors by exposure to create rate-based features",
+      "features": [
+        {
+          "name": "brakes_per_mile",
+          "formula": "count_brakes / (miles + 1e-6)",
+          "rationale": "Hard braking rate per mile - more meaningful than absolute counts"
+        },
+        {
+          "name": "accel_per_mile",
+          "formula": "count_accelarations / (miles + 1e-6)", 
+          "rationale": "Hard acceleration rate per mile - normalized risk behavior"
+        },
+        {
+          "name": "speeding_ratio",
+          "formula": "time_speeding_hours / (drive_hours + 1e-6)",
+          "rationale": "Proportion of time spent speeding - percentage-based risk metric"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "name": "Driving Context Features",
+      "description": "Create features that capture driving context and environment",
+      "features": [
+        {
+          "name": "highway_ratio",
+          "formula": "highway_miles / (miles + 1e-6)",
+          "rationale": "Proportion of highway driving - different risk profile than city driving"
+        },
+        {
+          "name": "night_ratio",
+          "formula": "night_drive_hrs / (drive_hours + 1e-6)",
+          "rationale": "Proportion of night driving - higher risk driving conditions"
+        },
+        {
+          "name": "phone_ratio",
+          "formula": "time_phoneuse_hours / (drive_hours + 1e-6)",
+          "rationale": "Proportion of time using phone while driving - distracted driving measure"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "name": "Composite Risk Scores",
+      "description": "Create aggregate features combining multiple risk indicators",
+      "features": [
+        {
+          "name": "exposure_score",
+          "formula": "miles + drive_hours + count_trip",
+          "rationale": "Total driving exposure - combines distance, time, and frequency"
+        },
+        {
+          "name": "behavior_risk_score",
+          "formula": "(brakes_per_mile + accel_per_mile + speeding_ratio + phone_ratio) / 4",
+          "rationale": "Average risk behavior score combining all normalized risk metrics"
+        }
+      ]
+    }
+  ],
+  "model_selection_steps": [
+    {
+      "step": 1,
+      "name": "Primary Model - Random Forest",
+      "description": "Train Random Forest as primary model based on superior performance in exploration experiments",
+      "algorithm": "RandomForestClassifier",
+      "hyperparameters": {
+        "n_estimators": 200,
+        "max_depth": 12,
+        "min_samples_split": 5,
+        "min_samples_leaf": 2,
+        "class_weight": "balanced",
+        "random_state": 42,
+        "n_jobs": -1
+      },
+      "rationale": "Random Forest handles imbalanced data well, provides feature importance, and showed best performance in exploration. Balanced class weights address class imbalance."
+    },
+    {
+      "step": 2,
+      "name": "Alternative Model - XGBoost",
+      "description": "Train XGBoost as comparison model for ensemble potential",
+      "algorithm": "XGBClassifier", 
+      "hyperparameters": {
+        "n_estimators": 200,
+        "max_depth": 8,
+        "learning_rate": 0.1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "scale_pos_weight": 20,
+        "random_state": 42
+      },
+      "rationale": "XGBoost often performs well on tabular data and handles imbalanced datasets. scale_pos_weight addresses class imbalance."
+    },
+    {
+      "step": 3,
+      "name": "Hyperparameter Tuning",
+      "description": "Use 5-fold cross-validation with PR-AUC scoring for hyperparameter optimization",
+      "method": "GridSearchCV or RandomizedSearchCV",
+      "cv_strategy": "StratifiedKFold(n_splits=5, shuffle=True, random_state=42)",
+      "scoring": "average_precision",
+      "parameters_to_tune": {
+        "RandomForest": ["n_estimators", "max_depth", "min_samples_split"],
+        "XGBoost": ["n_estimators", "max_depth", "learning_rate", "scale_pos_weight"]
+      }
+    }
+  ],
+  "feature_selection": {
+    "method": "Feature importance analysis and recursive feature elimination",
+    "primary_features": ["miles", "drive_hours", "count_brakes", "count_accelarations", "count_trip", "highway_miles", "exposure_score"],
+    "engineered_features": ["miles_per_trip", "brakes_per_mile", "accel_per_mile", "behavior_risk_score", "highway_ratio"],
+    "selection_criteria": "Select top 15 features based on Random Forest importance scores and cross-validation performance"
+  },
+  "evaluation_strategy": {
+    "primary_metric": "PR-AUC",
+    "secondary_metrics": ["Precision", "Recall", "F1-Score", "ROC-AUC"],
+    "evaluation_methods": [
+      {
+        "name": "Hold-out Test Evaluation",
+        "description": "Evaluate final model on held-out test set using all metrics"
+      },
+      {
+        "name": "Cross-Validation Analysis", 
+        "description": "5-fold stratified cross-validation on training set to assess model stability"
+      },
+      {
+        "name": "Threshold Optimization",
+        "description": "Find optimal classification threshold by maximizing F1-score on validation set"
+      },
+      {
+        "name": "Feature Importance Analysis",
+        "description": "Analyze and interpret feature importances to understand model decisions"
+      },
+      {
+        "name": "Error Analysis by Driver Segments",
+        "description": "Analyze model performance across different driver exposure levels (low/medium/high miles driven)"
+      },
+      {
+        "name": "Calibration Analysis",
+        "description": "Evaluate probability calibration using reliability diagrams and Brier score"
+      },
+      {
+        "name": "Month-wise Performance Analysis",
+        "description": "Analyze model performance across different months to identify seasonal patterns"
+      }
+    ]
+  },
+  "expected_outputs": {
+    "model_artifacts": [
+      "trained_random_forest_model.pkl",
+      "trained_xgboost_model.pkl", 
+      "feature_scaler.pkl",
+      "label_encoder.pkl",
+      "feature_importance_scores.json"
+    ],
+    "evaluation_results": [
+      "test_set_predictions.csv",
+      "evaluation_metrics.json",
+      "confusion_matrix.png",
+      "pr_curve.png",
+      "roc_curve.png",
+      "feature_importance_plot.png",
+      "calibration_plot.png"
+    ],
+    "analysis_reports": [
+      "model_performance_report.md",
+      "feature_analysis_report.md", 
+      "error_analysis_report.md",
+      "final_experiment_summary.json"
+    ]
+  },
+  "success_criteria": {
+    "minimum_pr_auc": 0.25,
+    "target_pr_auc": 0.30,
+    "precision_at_10_percent_recall": 0.15,
+    "model_stability": "CV standard deviation < 0.05"
+  }
+}

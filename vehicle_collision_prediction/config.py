@@ -11,25 +11,33 @@ class ConfigParsingFailed(Exception):
 class DataConfig:
     version: str
     dataset_name: str
-    placeholder: Any
+    target_column: str
+    binary_target_column: str
+    numerical_features: List[str]
+    categorical_features: List[str]
+    imputation_strategy: str
 
 
 @dataclass
 class FeaturesConfig:
-    placeholder: Any
+    create_engineered_features: bool
+    eps_value: float
 
 
 @dataclass
 class ModelEvalConfig:
     split_ratio: float
-    placeholder: Any
+    evaluation_metric: str
+    cv_folds: int
+    stratify: bool
 
 
 @dataclass
 class ModelConfig:
     model_type: str
     model_params: Dict[str, Any]
-    placeholder: Any
+    n_features_select: int
+    hyperparameter_tuning: bool
 
 
 @dataclass
