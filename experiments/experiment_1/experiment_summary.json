@@ -1,0 +1,128 @@
+{
+  "experiment_id": "experiment_1",
+  "experiment_name": "Vehicle Collision Prediction - Binary Classification with Exposure-Based Features", 
+  "timestamp": "2025-09-06T20:55:00.481078Z",
+  "primary_metric": {
+    "name": "PR-AUC",
+    "value": 0.238,
+    "target": 0.25,
+    "achieved_target": false
+  },
+  "secondary_metrics": {
+    "roc_auc": 0.805,
+    "precision": 0.2238,
+    "recall": 0.3516,
+    "f1_score": 0.2735,
+    "accuracy": 0.9113
+  },
+  "model_configuration": {
+    "algorithm": "RandomForestClassifier",
+    "hyperparameters": {
+      "n_estimators": 200,
+      "max_depth": 12,
+      "min_samples_split": 5,
+      "min_samples_leaf": 2,
+      "class_weight": "balanced",
+      "random_state": 42
+    }
+  },
+  "dataset_info": {
+    "train_samples": 7667,
+    "test_samples": 1917,
+    "class_distribution": {
+      "no_collision": 0.952,
+      "collision": 0.048
+    },
+    "imbalance_ratio": "20:1"
+  },
+  "feature_importance_top10": [
+    {"feature": "drive_hours", "importance": 0.1410},
+    {"feature": "hours_per_trip", "importance": 0.1109},
+    {"feature": "miles", "importance": 0.1060},
+    {"feature": "count_accelerations", "importance": 0.1006},
+    {"feature": "count_brakes", "importance": 0.0923},
+    {"feature": "brakes_per_mile", "importance": 0.0852},
+    {"feature": "time_phoneuse_hours", "importance": 0.0494},
+    {"feature": "miles_per_trip", "importance": 0.0493},
+    {"feature": "avg_speed", "importance": 0.0459},
+    {"feature": "month_encoded", "importance": 0.0440}
+  ],
+  "confusion_matrix": {
+    "true_positives": 32,
+    "false_positives": 111,
+    "true_negatives": 1715,
+    "false_negatives": 59
+  },
+  "key_findings": [
+    "Exposure-based feature engineering significantly improved model performance (+13% relative improvement over baseline)",
+    "RandomForestClassifier with balanced class weights proved optimal for this imbalanced classification task",
+    "Model shows strong discrimination ability (ROC-AUC = 0.805) but struggles with precision due to severe class imbalance",
+    "Top features are dominated by driving exposure metrics, validating the core hypothesis",
+    "Model exhibits poor probability calibration, particularly over-estimating risk at medium confidence levels"
+  ],
+  "strengths": [
+    "Strong discrimination ability with ROC-AUC of 0.805",
+    "Effective exposure-based feature engineering approach", 
+    "Reasonable recall (35.16%) for highly imbalanced dataset",
+    "Comprehensive evaluation framework with multiple visualizations",
+    "Successful MLflow model packaging for production deployment"
+  ],
+  "weaknesses": [
+    "PR-AUC (0.238) falls short of minimum target (0.25)",
+    "Low precision (22.38%) leading to high false positive rate",
+    "Poor probability calibration across confidence levels",
+    "Limited feature set missing contextual information (weather, traffic, demographics)",
+    "Model performance heavily constrained by severe class imbalance"
+  ],
+  "comparison_to_baseline": {
+    "baseline_pr_auc": 0.211,
+    "final_pr_auc": 0.238,
+    "relative_improvement": 0.128,
+    "improvement_driver": "exposure-based feature engineering"
+  },
+  "calibration_analysis": {
+    "overall_assessment": "poor_calibration",
+    "issues": [
+      "Over-calibrated at medium confidence levels (14-35% predicted vs 7-8% actual)",
+      "Under-calibrated at high confidence levels (82% predicted vs 60% actual)"
+    ]
+  },
+  "future_recommendations": {
+    "immediate_improvements": [
+      "Implement threshold optimization based on business costs",
+      "Apply probability calibration techniques (Platt scaling or isotonic regression)",
+      "Explore ensemble methods combining RandomForest with other algorithms",
+      "Engineer temporal features and interaction terms"
+    ],
+    "strategic_enhancements": [
+      "Collect additional contextual features (weather, traffic density, demographics)",
+      "Implement cost-sensitive learning with asymmetric loss functions",
+      "Develop temporal modeling to capture seasonal and time-of-day patterns",
+      "Integrate external data sources for road and traffic conditions"
+    ]
+  },
+  "artifacts_generated": [
+    "trained_model.pkl",
+    "feature_processor.pkl", 
+    "data_processor.pkl",
+    "mlflow_model_package",
+    "precision_recall_curve.html",
+    "roc_curve.html",
+    "feature_importance.html",
+    "calibration_plot.html",
+    "confusion_matrix.html",
+    "prediction_distribution.html"
+  ],
+  "success_criteria_assessment": {
+    "minimum_pr_auc": {"target": 0.25, "achieved": 0.238, "met": false},
+    "target_pr_auc": {"target": 0.30, "achieved": 0.238, "met": false},
+    "model_functionality": {"target": "working_pipeline", "achieved": true, "met": true},
+    "artifact_generation": {"target": "complete_evaluation", "achieved": true, "met": true}
+  },
+  "next_iteration_focus": [
+    "Precision improvement through threshold optimization",
+    "Probability calibration enhancement",
+    "Advanced feature engineering with temporal patterns",
+    "Cost-sensitive learning implementation"
+  ]
+}

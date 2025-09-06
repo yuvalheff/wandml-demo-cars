@@ -79,19 +79,29 @@ class Experiment:
         return X_train, X_test, y_train, y_test
 
     def _train_model(self, X_train: pd.DataFrame, y_train: np.ndarray) -> None:
-        """Train the model"""
+        """Train the model with optional calibration"""
         print("🏋️ Training model...")
         
-        # Initialize model
-        self.model = ModelWrapper(self._config.model)
+        # Initialize model with calibration settings
+        calibrate = getattr(self._config.model_evaluation, 'calibrate_probabilities', False)
+        calibration_method = getattr(self._config.model_evaluation, 'calibration_method', 'sigmoid')
         
-        # Train model
+        self.model = ModelWrapper(
+            self._config.model,
+            calibrate=calibrate,
+            calibration_method=calibration_method
+        )
+        
+        # Train model (with calibration if enabled)
         self.model.fit(X_train, y_train)
         
-        print("✅ Model training completed")
+        if calibrate:
+            print(f"✅ Model training completed with {calibration_method} calibration")
+        else:
+            print("✅ Model training completed")
 
     def _evaluate_model(self, X_test: pd.DataFrame, y_test: np.ndarray, output_dir: str) -> Dict[str, Any]:
-        """Evaluate the model and generate plots"""
+        """Evaluate the model and generate plots with threshold optimization"""
         print("📊 Evaluating model...")
         
         # Make predictions
@@ -101,8 +111,29 @@ class Experiment:
         # Initialize evaluator
         evaluator = ModelEvaluator(self._config.model_evaluation)
         
-        # Calculate metrics
+        # Calculate base metrics
         metrics = evaluator.evaluate_model(y_test, y_pred, y_pred_proba)
+        
+        # Threshold optimization if enabled
+        if getattr(self._config.model_evaluation, 'threshold_optimization', False):
+            print("🎯 Performing threshold optimization...")
+            threshold_strategies = getattr(self._config.model_evaluation, 'threshold_strategies', ['optimal_f1'])
+            threshold_results = {}
+            
+            for strategy in threshold_strategies:
+                optimal_threshold, threshold_metrics = evaluator.optimize_threshold(
+                    y_test, y_pred_proba, strategy=strategy
+                )
+                threshold_results[strategy] = {
+                    'threshold': optimal_threshold,
+                    'metrics': threshold_metrics
+                }
+                print(f"✅ {strategy}: threshold={optimal_threshold:.3f}, "
+                      f"precision={threshold_metrics['precision']:.3f}, "
+                      f"recall={threshold_metrics['recall']:.3f}, "
+                      f"f1={threshold_metrics['f1_score']:.3f}")
+            
+            metrics['threshold_optimization'] = threshold_results
         
         # Generate plots
         plots_dir = os.path.join(output_dir, "plots")
@@ -117,6 +148,12 @@ class Experiment:
             feature_importance=feature_importance,
             output_dir=plots_dir
         )
+        
+        # Add threshold analysis plot if optimization was performed
+        if getattr(self._config.model_evaluation, 'threshold_optimization', False):
+            plot_files['threshold_analysis'] = evaluator.create_threshold_analysis_plot(
+                y_test, y_pred_proba, plots_dir
+            )
         
         print(f"✅ Generated evaluation plots in: {plots_dir}")
         print(f"📈 Primary metric (PR-AUC): {metrics['pr_auc']:.4f}")
@@ -165,8 +202,8 @@ class Experiment:
         sample_probabilities = self.pipeline.predict_proba(X_sample.head(2))
         print(f"✅ Pipeline test successful - sample predictions: {sample_predictions}")
         
-        # Define paths
-        output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_1/output/model_artifacts/mlflow_model/"
+        # Define paths - MUST use experiment_2 directory
+        output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_2/output/model_artifacts/mlflow_model/"
         relative_path_for_return = "output/model_artifacts/mlflow_model/"
         
         # Create sample input for signature
@@ -188,7 +225,7 @@ class Experiment:
         )
         
         # 2. If an MLflow run ID is provided, reconnect and log the model as an artifact
-        active_run_id = "5a75c53e2e2d49779d689f2a7a56b2f3"
+        active_run_id = "15a25ee2eedc41ffae4d66f75d6437e3"
         logged_model_uri = None  # Initialize to None
         
         if active_run_id and active_run_id != 'None' and active_run_id.strip():
@@ -267,7 +304,7 @@ class Experiment:
             
             # Prepare results
             results = {
-                "metric_name": "average_precision",
+                "metric_name": "PR-AUC",
                 "metric_value": metrics["pr_auc"],
                 "model_artifacts": artifact_files,
                 "mlflow_model_info": mlflow_model_info

@@ -1,0 +1,225 @@
+{
+  "experiment_name": "Calibrated Vehicle Collision Prediction with Threshold Optimization",
+  "experiment_description": "Improve precision-recall performance through probability calibration and threshold optimization, building on the exposure-based RandomForest model from iteration 1",
+  "task_type": "Binary Classification",
+  "target_column": "collisions",
+  "primary_evaluation_metric": "PR-AUC",
+  "secondary_evaluation_metrics": ["ROC-AUC", "Precision", "Recall", "F1-Score"],
+  
+  "preprocessing_steps": [
+    {
+      "step": "missing_value_imputation",
+      "description": "Handle missing values using median imputation for numerical features",
+      "details": {
+        "numerical_columns": ["count_trip", "miles", "drive_hours", "count_brakes", "count_accelarations", "time_speeding_hours", "time_phoneuse_hours", "highway_miles", "night_drive_hrs", "maximum_speed"],
+        "imputation_method": "median",
+        "rationale": "Preserves distribution shape and is robust to outliers in telematic data"
+      }
+    },
+    {
+      "step": "target_transformation",
+      "description": "Convert multi-class collision target to binary classification",
+      "details": {
+        "transformation": "Convert collisions > 0 to 1 (collision), collisions = 0 to 0 (no collision)",
+        "rationale": "Binary classification improves model performance on imbalanced data and aligns with business use case"
+      }
+    },
+    {
+      "step": "categorical_encoding",
+      "description": "Encode categorical month variable using label encoding",
+      "details": {
+        "column": "month",
+        "encoding_method": "LabelEncoder",
+        "new_column_name": "month_encoded"
+      }
+    }
+  ],
+  
+  "feature_engineering_steps": [
+    {
+      "step": "exposure_based_features",
+      "description": "Create driving exposure and behavioral rate features validated in iteration 1",
+      "features": [
+        {
+          "name": "miles_per_trip",
+          "formula": "miles / (count_trip + 1e-8)",
+          "rationale": "Trip distance patterns indicate driving behavior and risk exposure"
+        },
+        {
+          "name": "hours_per_trip", 
+          "formula": "drive_hours / (count_trip + 1e-8)",
+          "rationale": "Trip duration patterns indicate driving patterns and exposure"
+        },
+        {
+          "name": "brakes_per_mile",
+          "formula": "count_brakes / (miles + 1e-8)", 
+          "rationale": "Braking intensity per distance indicates aggressive driving behavior"
+        },
+        {
+          "name": "accel_per_mile",
+          "formula": "count_accelarations / (miles + 1e-8)",
+          "rationale": "Acceleration intensity per distance indicates aggressive driving behavior"
+        },
+        {
+          "name": "speed_per_mile", 
+          "formula": "time_speeding_hours / (miles + 1e-8)",
+          "rationale": "Speeding intensity per distance indicates risk-taking behavior"
+        }
+      ]
+    }
+  ],
+  
+  "model_selection_steps": [
+    {
+      "step": "base_model_training",
+      "description": "Train RandomForestClassifier with balanced class weights as established in iteration 1",
+      "algorithm": "RandomForestClassifier",
+      "hyperparameters": {
+        "n_estimators": 100,
+        "class_weight": "balanced",
+        "random_state": 42
+      },
+      "rationale": "Proven effective in iteration 1 with strong discrimination (ROC-AUC=0.805) and feature importance insights"
+    },
+    {
+      "step": "probability_calibration", 
+      "description": "Apply sigmoid calibration to improve probability estimates reliability",
+      "calibration_method": "sigmoid",
+      "cross_validation_folds": 5,
+      "rationale": "Exploration experiments showed 8.5% PR-AUC improvement and better calibration quality than isotonic method"
+    },
+    {
+      "step": "threshold_optimization",
+      "description": "Optimize classification threshold for business-specific precision-recall trade-offs",
+      "optimization_strategies": [
+        {
+          "name": "optimal_f1",
+          "description": "Find threshold maximizing F1-score for balanced performance"
+        },
+        {
+          "name": "high_precision",
+          "description": "Find threshold achieving precision >= 0.4 to minimize false alarms"
+        },
+        {
+          "name": "high_recall", 
+          "description": "Find threshold achieving recall >= 0.6 for safety-critical applications"
+        }
+      ],
+      "rationale": "Different business applications require different precision-recall trade-offs; provide options for decision makers"
+    }
+  ],
+  
+  "evaluation_strategy": [
+    {
+      "metric": "PR-AUC", 
+      "description": "Primary metric for imbalanced classification, target >= 0.25",
+      "evaluation_type": "threshold_independent"
+    },
+    {
+      "metric": "ROC-AUC",
+      "description": "Model discrimination ability, compare to iteration 1 baseline of 0.805", 
+      "evaluation_type": "threshold_independent"
+    },
+    {
+      "metric": "Precision-Recall Curves",
+      "description": "Visualize trade-offs across all thresholds, compare calibrated vs uncalibrated",
+      "evaluation_type": "visualization"
+    },
+    {
+      "metric": "Calibration Assessment",
+      "description": "Reliability diagram comparing predicted probabilities to actual collision rates",
+      "evaluation_type": "calibration_analysis",
+      "details": "Bin predictions into 10 probability ranges, compare predicted vs actual rates"
+    },
+    {
+      "metric": "Threshold Performance Analysis",
+      "description": "Precision, Recall, F1 for each optimized threshold strategy",
+      "evaluation_type": "threshold_dependent",
+      "thresholds": ["optimal_f1", "high_precision", "high_recall", "default_0.5"]
+    },
+    {
+      "metric": "Feature Importance Analysis",
+      "description": "Validate that exposure-based features remain most predictive",
+      "evaluation_type": "model_interpretation"
+    },
+    {
+      "metric": "Confusion Matrix Analysis", 
+      "description": "Detailed error analysis for each threshold strategy",
+      "evaluation_type": "error_analysis"
+    }
+  ],
+  
+  "expected_outputs": [
+    {
+      "file": "calibrated_collision_model.pkl",
+      "description": "Trained and calibrated RandomForest model ready for deployment"
+    },
+    {
+      "file": "threshold_optimization_results.json", 
+      "description": "Optimal thresholds for different business scenarios with performance metrics"
+    },
+    {
+      "file": "model_evaluation_report.html",
+      "description": "Comprehensive evaluation including calibration plots, PR curves, and threshold analysis"
+    },
+    {
+      "file": "feature_importance_analysis.json",
+      "description": "Feature importance rankings and validation of exposure hypothesis"
+    },
+    {
+      "file": "mlflow_experiment_tracking.json",
+      "description": "MLflow tracking with calibrated model artifacts and evaluation metrics"
+    }
+  ],
+  
+  "success_criteria": [
+    {
+      "criterion": "PR-AUC improvement",
+      "target": ">= 0.25 (5% improvement over iteration 1)",
+      "rationale": "Meaningful improvement in primary business metric"
+    },
+    {
+      "criterion": "Calibration quality", 
+      "target": "Predicted probabilities within ±10% of actual rates across probability bins",
+      "rationale": "Reliable probabilities enable threshold-based decision making"
+    },
+    {
+      "criterion": "ROC-AUC maintenance",
+      "target": ">= 0.80 (maintain strong discrimination ability)",
+      "rationale": "Ensure calibration doesn't hurt model's core predictive power"
+    },
+    {
+      "criterion": "Threshold flexibility",
+      "target": "Provide 3+ threshold options with precision range 20-50% and recall range 30-70%",
+      "rationale": "Enable business stakeholders to choose appropriate precision-recall trade-off"
+    }
+  ],
+  
+  "iteration_changes_from_previous": [
+    {
+      "change": "Added probability calibration using CalibratedClassifierCV with sigmoid method",
+      "rationale": "Address poor calibration identified in iteration 1, improve decision-making reliability"
+    },
+    {
+      "change": "Implemented systematic threshold optimization with multiple business strategies", 
+      "rationale": "Provide actionable threshold recommendations for different deployment scenarios"
+    },
+    {
+      "change": "Enhanced evaluation with calibration assessment and threshold-dependent metrics",
+      "rationale": "Measure calibration quality and threshold optimization effectiveness"
+    }
+  ],
+  
+  "data_paths": {
+    "train_path": "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/data/train_set.csv",
+    "test_path": "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/data/test_set.csv"
+  },
+  
+  "implementation_notes": [
+    "Use same feature engineering as iteration 1 - no new features to isolate calibration impact",
+    "Apply calibration using 5-fold cross-validation to prevent overfitting",
+    "Save uncalibrated model alongside calibrated for comparison",
+    "Document threshold selection rationale for business stakeholders",
+    "Include confidence intervals for all reported metrics"
+  ]
+}

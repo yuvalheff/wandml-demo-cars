@@ -5,6 +5,8 @@ from typing import Optional
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import StratifiedKFold
 
 from vehicle_collision_prediction.config import ModelConfig
 
@@ -15,10 +17,13 @@ except ImportError:
 
 
 class ModelWrapper:
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: ModelConfig, calibrate: bool = False, calibration_method: str = "sigmoid"):
         self.config: ModelConfig = config
         self.model = None
+        self.calibrated_model = None
         self.feature_selector = None
+        self.calibrate = calibrate
+        self.calibration_method = calibration_method
         self._initialize_model()
 
     def _initialize_model(self):
@@ -53,15 +58,29 @@ class ModelWrapper:
         numeric_features = X.select_dtypes(include=[np.number])
         
         # Feature selection - select top K features based on config or use all
-        n_features_to_select = getattr(self.config, 'n_features_select', 15)
+        n_features_to_select = getattr(self.config, 'n_features_select', None)
         if n_features_to_select and n_features_to_select < numeric_features.shape[1]:
             self.feature_selector = SelectKBest(score_func=f_classif, k=n_features_to_select)
             X_selected = self.feature_selector.fit_transform(numeric_features, y)
         else:
             X_selected = numeric_features
         
-        # Fit the model
+        # Fit the base model
         self.model.fit(X_selected, y)
+        
+        # Apply calibration if requested
+        if self.calibrate:
+            # Use fewer splits for small samples, full 5-fold for larger samples
+            n_samples_per_class = min(np.bincount(y))
+            n_splits = min(5, max(2, n_samples_per_class))
+            
+            self.calibrated_model = CalibratedClassifierCV(
+                estimator=self.model,
+                method=self.calibration_method,
+                cv=StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+            )
+            self.calibrated_model.fit(X_selected, y)
+        
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -86,7 +105,11 @@ class ModelWrapper:
         else:
             X_selected = numeric_features
         
-        return self.model.predict(X_selected)
+        # Use calibrated model if available
+        if self.calibrated_model is not None:
+            return self.calibrated_model.predict(X_selected)
+        else:
+            return self.model.predict(X_selected)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """
@@ -110,7 +133,11 @@ class ModelWrapper:
         else:
             X_selected = numeric_features
         
-        return self.model.predict_proba(X_selected)
+        # Use calibrated model if available
+        if self.calibrated_model is not None:
+            return self.calibrated_model.predict_proba(X_selected)
+        else:
+            return self.model.predict_proba(X_selected)
 
     def get_feature_importance(self) -> Optional[np.ndarray]:
         """

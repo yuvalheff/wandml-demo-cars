@@ -403,3 +403,158 @@ class ModelEvaluator:
             plot_files['feature_importance'] = self.create_feature_importance_plot(feature_names, feature_importance, output_dir)
         
         return plot_files
+
+    def optimize_threshold(self, y_true: np.ndarray, y_pred_proba: np.ndarray, 
+                          strategy: str = 'optimal_f1') -> Tuple[float, Dict[str, float]]:
+        """
+        Optimize classification threshold based on different strategies.
+        
+        Parameters:
+        y_true: True labels
+        y_pred_proba: Predicted probabilities
+        strategy: Threshold optimization strategy
+        
+        Returns:
+        Tuple of (optimal_threshold, metrics_at_threshold)
+        """
+        # Get probabilities for positive class
+        if len(y_pred_proba.shape) > 1 and y_pred_proba.shape[1] > 1:
+            y_proba_positive = y_pred_proba[:, 1]
+        else:
+            y_proba_positive = y_pred_proba.ravel()
+        
+        thresholds = np.linspace(0.01, 0.99, 99)
+        
+        if strategy == 'optimal_f1':
+            # Find threshold that maximizes F1 score
+            best_threshold = 0.5
+            best_f1 = 0
+            
+            for threshold in thresholds:
+                y_pred_thresh = (y_proba_positive >= threshold).astype(int)
+                f1 = f1_score(y_true, y_pred_thresh, zero_division=0)
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_threshold = threshold
+                    
+        elif strategy == 'high_precision':
+            # Find threshold that achieves at least 40% precision with highest recall
+            best_threshold = 0.5
+            best_recall = 0
+            target_precision = 0.40
+            
+            for threshold in thresholds:
+                y_pred_thresh = (y_proba_positive >= threshold).astype(int)
+                precision = precision_score(y_true, y_pred_thresh, zero_division=0)
+                recall = recall_score(y_true, y_pred_thresh, zero_division=0)
+                
+                if precision >= target_precision and recall > best_recall:
+                    best_recall = recall
+                    best_threshold = threshold
+                    
+        elif strategy == 'high_recall':
+            # Find threshold that achieves at least 60% recall with highest precision
+            best_threshold = 0.5
+            best_precision = 0
+            target_recall = 0.60
+            
+            for threshold in thresholds:
+                y_pred_thresh = (y_proba_positive >= threshold).astype(int)
+                precision = precision_score(y_true, y_pred_thresh, zero_division=0)
+                recall = recall_score(y_true, y_pred_thresh, zero_division=0)
+                
+                if recall >= target_recall and precision > best_precision:
+                    best_precision = precision
+                    best_threshold = threshold
+        else:
+            best_threshold = 0.5
+        
+        # Calculate metrics at optimal threshold
+        y_pred_optimal = (y_proba_positive >= best_threshold).astype(int)
+        metrics_at_threshold = {
+            'threshold': best_threshold,
+            'precision': precision_score(y_true, y_pred_optimal, zero_division=0),
+            'recall': recall_score(y_true, y_pred_optimal, zero_division=0),
+            'f1_score': f1_score(y_true, y_pred_optimal, zero_division=0),
+            'accuracy': accuracy_score(y_true, y_pred_optimal)
+        }
+        
+        return best_threshold, metrics_at_threshold
+
+    def create_threshold_analysis_plot(self, y_true: np.ndarray, y_pred_proba: np.ndarray, 
+                                     output_dir: str) -> str:
+        """Create threshold analysis plot showing precision/recall vs threshold"""
+        # Get probabilities for positive class
+        if len(y_pred_proba.shape) > 1 and y_pred_proba.shape[1] > 1:
+            y_proba_positive = y_pred_proba[:, 1]
+        else:
+            y_proba_positive = y_pred_proba.ravel()
+        
+        thresholds = np.linspace(0.01, 0.99, 99)
+        precisions = []
+        recalls = []
+        f1_scores = []
+        
+        for threshold in thresholds:
+            y_pred_thresh = (y_proba_positive >= threshold).astype(int)
+            precision = precision_score(y_true, y_pred_thresh, zero_division=0)
+            recall = recall_score(y_true, y_pred_thresh, zero_division=0)
+            f1 = f1_score(y_true, y_pred_thresh, zero_division=0)
+            
+            precisions.append(precision)
+            recalls.append(recall)
+            f1_scores.append(f1)
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=thresholds,
+            y=precisions,
+            mode='lines',
+            name='Precision',
+            line=dict(color=self.app_color_palette[0], width=2)
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=thresholds,
+            y=recalls,
+            mode='lines',
+            name='Recall',
+            line=dict(color=self.app_color_palette[1], width=2)
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=thresholds,
+            y=f1_scores,
+            mode='lines',
+            name='F1 Score',
+            line=dict(color=self.app_color_palette[2], width=2)
+        ))
+        
+        fig.update_layout(
+            title='Threshold Analysis: Precision, Recall, and F1 Score',
+            xaxis_title='Threshold',
+            yaxis_title='Score',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#8B5CF6', size=12),
+            title_font=dict(color='#7C3AED', size=16),
+            xaxis=dict(
+                gridcolor='rgba(139,92,246,0.2)',
+                zerolinecolor='rgba(139,92,246,0.3)',
+                tickfont=dict(color='#8B5CF6', size=11),
+                title_font=dict(color='#7C3AED', size=12)
+            ),
+            yaxis=dict(
+                gridcolor='rgba(139,92,246,0.2)',
+                zerolinecolor='rgba(139,92,246,0.3)',
+                tickfont=dict(color='#8B5CF6', size=11),
+                title_font=dict(color='#7C3AED', size=12)
+            ),
+            legend=dict(font=dict(color='#8B5CF6', size=11))
+        )
+        
+        filename = "threshold_analysis.html"
+        filepath = os.path.join(output_dir, filename)
+        fig.write_html(filepath, include_plotlyjs=True, config={'responsive': True, 'displayModeBar': False})
+        return filename

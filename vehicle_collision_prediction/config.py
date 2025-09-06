@@ -30,13 +30,17 @@ class ModelEvalConfig:
     evaluation_metric: str
     cv_folds: int
     stratify: bool
+    calibrate_probabilities: bool = False
+    calibration_method: str = "sigmoid"
+    threshold_optimization: bool = False
+    threshold_strategies: List[str] = None
 
 
 @dataclass
 class ModelConfig:
     model_type: str
     model_params: Dict[str, Any]
-    n_features_select: int
+    n_features_select: Optional[int]
     hyperparameter_tuning: bool
 
 
