@@ -23,26 +23,25 @@ class ModelWrapper:
         self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize model based on configuration - experiment 3: no class balancing"""
+        """Initialize model based on configuration - Experiment 4: default RandomForest parameters"""
         if self.config.model_type == "RandomForest":
             self.model = RandomForestClassifier(**self.config.model_params)
         elif self.config.model_type == "XGBoost" and XGBClassifier is not None:
             self.model = XGBClassifier(**self.config.model_params)
         else:
-            # Default to RandomForest with experiment 3 parameters (NO class balancing)
+            # Default to RandomForest with Experiment 4 parameters (default hyperparameters)
             self.model = RandomForestClassifier(
                 n_estimators=200,
                 random_state=42,
+                class_weight=None,
                 max_depth=None,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                n_jobs=-1
+                min_samples_split=2
             )
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
         """
         Fit the classifier to the training data.
-        Experiment 3: No calibration, feature selection handled in FeatureProcessor.
+        Experiment 4: No feature selection, all 18 features used.
 
         Parameters:
         X: Training features.

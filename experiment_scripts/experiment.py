@@ -42,7 +42,7 @@ class Experiment:
         return train_data, test_data
 
     def _prepare_data(self, train_data: pd.DataFrame, test_data: pd.DataFrame) -> tuple:
-        """Prepare features and targets according to experiment 3 plan"""
+        """Prepare features and targets according to experiment 4 plan"""
         # Initialize and fit data processor on training data
         print("🔧 Initializing and fitting data processor...")
         self.data_processor = DataProcessor(self._config.data_prep)
@@ -55,29 +55,28 @@ class Experiment:
         X_test_processed = self.data_processor.transform(test_data)
         y_test = (test_data['collisions'] > 0).astype(int)  # Binary target
         
-        print("🔧 Initializing and fitting feature processor with SelectKBest...")
-        self.feature_processor = FeatureProcessor(self._config.feature_prep, 
-                                                  n_features_select=self._config.model.n_features_select)
+        print("🔧 Initializing and fitting feature processor (enhanced features, no selection)...")
+        self.feature_processor = FeatureProcessor(self._config.feature_prep)
         
-        # Fit feature processor on training data (requires target for SelectKBest)
-        X_train_features = self.feature_processor.fit_transform(X_train_processed, y_train)
+        # Fit feature processor on training data (no target needed for Experiment 4)
+        X_train_features = self.feature_processor.fit_transform(X_train_processed)
         
         # Transform test data
         X_test_features = self.feature_processor.transform(X_test_processed)
         
         print(f"✅ Training features shape after preprocessing: {X_train_features.shape}")
         print(f"✅ Test features shape after preprocessing: {X_test_features.shape}")
-        print(f"✅ Selected features: {self.feature_processor.selected_features}")
+        print("✅ Using all 18 features (11 original + 1 encoded + 6 engineered)")
         
         return X_train_features, X_test_features, y_train, y_test
 
     def _train_model(self, X_train: pd.DataFrame, y_train: pd.Series) -> None:
-        """Train the model according to experiment 3 specifications"""
-        print("🚀 Training RandomForest model (no class balancing)...")
+        """Train the model according to experiment 4 specifications"""
+        print("🚀 Training RandomForest model with default parameters...")
         
         # Exclude target columns from training features
         feature_cols = [col for col in X_train.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+                       if col not in ['driver_id', 'collisions', 'collision_binary']]
         X_train_clean = X_train[feature_cols].select_dtypes(include=[np.number])
         
         print(f"🔧 Training on {X_train_clean.shape[1]} features: {list(X_train_clean.columns)}")
@@ -92,7 +91,7 @@ class Experiment:
         
         # Exclude target columns from test features (same as training)
         feature_cols = [col for col in X_test.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+                       if col not in ['driver_id', 'collisions', 'collision_binary']]
         X_test_clean = X_test[feature_cols].select_dtypes(include=[np.number])
         
         # Make predictions
@@ -175,7 +174,7 @@ class Experiment:
         
         # Initialize feature columns from training data to ensure consistency
         feature_cols = [col for col in X_train_features.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+                       if col not in ['driver_id', 'collisions', 'collision_binary']]
         training_features = X_train_features[feature_cols].select_dtypes(include=[np.number])
         self.pipeline.feature_columns = list(training_features.columns)
         
@@ -186,7 +185,7 @@ class Experiment:
         print(f"✅ Pipeline test successful - predictions: {sample_pred[:3]}")
         
         # Define paths
-        base_output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_3/output/model_artifacts/mlflow_model/"
+        base_output_path = "/Users/yuvalheffetz/ds-agent-projects/session_5feb6ac6-f292-4d0c-9e41-ab6b3ffc14d6/experiments/experiment_4/output/model_artifacts/mlflow_model/"
         relative_path = "output/model_artifacts/mlflow_model/"
         
         # Create signature
@@ -203,7 +202,7 @@ class Experiment:
         
         # Conditionally log to MLflow if run ID available
         logged_model_uri = None
-        active_run_id = "771f363fd0da40d0b7f59349952caed2"
+        active_run_id = "4dafb94a0c2f44efb9bdbcd32c30f588"
         
         if active_run_id and active_run_id != 'None' and active_run_id.strip():
             print(f"✅ Active MLflow run ID '{active_run_id}' detected. Reconnecting to log model.")
@@ -237,13 +236,13 @@ class Experiment:
 
     def run(self, train_dataset_path: str, test_dataset_path: str, output_dir: str, seed: int = 42) -> Dict[str, Any]:
         """
-        Run complete experiment according to experiment 3 plan
+        Run complete experiment according to experiment 4 plan
         
         Returns:
         Dict with mandatory format including mlflow_model_info
         """
         try:
-            print("🎯 Starting Experiment 3: Feature Selection Enhanced Vehicle Collision Prediction")
+            print("🎯 Starting Experiment 4: Enhanced Feature Engineering Vehicle Collision Prediction")
             
             # Set seed for reproducibility
             self._set_seed(seed)
@@ -266,7 +265,7 @@ class Experiment:
             # Create and save MLflow pipeline
             mlflow_model_info = self._create_mlflow_pipeline(train_data.head(3), X_train)
             
-            print("🎉 Experiment completed successfully!")
+            print("🎉 Experiment 4 completed successfully!")
             
             return {
                 "metric_name": self._config.model_evaluation.evaluation_metric,

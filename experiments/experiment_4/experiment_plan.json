@@ -1,0 +1,148 @@
+{
+    "experiment_name": "Enhanced Feature Engineering Vehicle Collision Prediction",
+    "experiment_description": "Address Experiment 3's performance regression by eliminating feature selection and focusing on comprehensive feature engineering with Random Forest classifier",
+    "key_change_from_previous": "Remove SelectKBest feature selection and use all features with enhanced feature engineering to recover performance lost in Experiment 3",
+    "expected_performance": "PR-AUC 0.240-0.250 range, closing gap to baseline and moving toward 0.280 target",
+    
+    "data_preprocessing": {
+        "missing_value_handling": {
+            "method": "median_imputation",
+            "columns": ["count_trip", "miles", "drive_hours", "count_brakes", "count_accelarations", "time_speeding_hours", "highway_miles", "night_drive_hrs", "maximum_speed"],
+            "special_handling": {
+                "time_phoneuse_hours": "median_imputation_due_to_13_percent_missing"
+            }
+        },
+        "categorical_encoding": {
+            "month": "label_encoding_to_month_encoded"
+        },
+        "target_transformation": {
+            "method": "binary_classification",
+            "transformation": "collisions > 0 to collision_binary",
+            "rationale": "Convert multi-class (0,1,2) to binary (0,1) for improved PR-AUC optimization"
+        }
+    },
+    
+    "feature_engineering": {
+        "exposure_ratios": [
+            {
+                "feature_name": "miles_per_trip",
+                "calculation": "miles / count_trip (0 if count_trip == 0)",
+                "purpose": "Average trip distance - key exposure metric"
+            },
+            {
+                "feature_name": "hours_per_trip", 
+                "calculation": "drive_hours / count_trip (0 if count_trip == 0)",
+                "purpose": "Average trip duration - exposure intensity"
+            }
+        ],
+        "behavior_ratios": [
+            {
+                "feature_name": "brakes_per_mile",
+                "calculation": "count_brakes / miles (0 if miles == 0)",
+                "purpose": "Braking intensity per distance traveled"
+            },
+            {
+                "feature_name": "accel_per_mile",
+                "calculation": "count_accelarations / miles (0 if miles == 0)", 
+                "purpose": "Acceleration intensity per distance traveled"
+            }
+        ],
+        "risk_ratios": [
+            {
+                "feature_name": "speed_ratio",
+                "calculation": "time_speeding_hours / max(drive_hours, 0.001)",
+                "purpose": "Proportion of time spent speeding"
+            },
+            {
+                "feature_name": "highway_ratio",
+                "calculation": "highway_miles / miles (0 if miles == 0)",
+                "purpose": "Proportion of highway vs local driving"
+            },
+            {
+                "feature_name": "night_ratio",
+                "calculation": "night_drive_hrs / max(drive_hours, 0.001)",
+                "purpose": "Proportion of night driving"
+            }
+        ],
+        "total_features": 18,
+        "feature_selection_approach": "NONE - use all features based on exploration showing feature selection hurts performance"
+    },
+    
+    "model_selection": {
+        "primary_algorithm": "RandomForestClassifier",
+        "hyperparameters": {
+            "n_estimators": 200,
+            "random_state": 42,
+            "class_weight": null,
+            "max_depth": null,
+            "min_samples_split": 2,
+            "rationale": "Default parameters outperformed tuned versions in exploration experiments"
+        },
+        "rationale": "Random Forest with all features achieved best PR-AUC (0.241) in exploration, significantly outperforming feature selection approaches"
+    },
+    
+    "validation_strategy": {
+        "method": "stratified_5_fold_cross_validation",
+        "stratification": "collision_binary target to preserve class balance",
+        "final_evaluation": "single_holdout_test_set",
+        "metrics_during_cv": ["roc_auc"],
+        "final_metrics": ["pr_auc", "roc_auc", "precision", "recall", "f1"],
+        "performance_gap_monitoring": "Track CV vs test performance to avoid Experiment 3's 21.3% gap"
+    },
+    
+    "evaluation_strategy": {
+        "primary_metric": "PR_AUC",
+        "threshold_analysis": "Generate precision-recall curve and analyze multiple threshold strategies",
+        "business_scenarios": [
+            {
+                "scenario": "high_precision",
+                "threshold_target": "30% precision",
+                "expected_recall": "10-20%"
+            },
+            {
+                "scenario": "balanced_f1",
+                "threshold_target": "maximize F1 score", 
+                "expected_performance": "15% precision, 35% recall"
+            },
+            {
+                "scenario": "high_recall",
+                "threshold_target": "60% recall",
+                "expected_precision": "8-12%"
+            }
+        ],
+        "feature_importance_analysis": "Analyze RandomForest feature_importances_ to validate engineered features",
+        "error_analysis": "Analyze false positive and false negative patterns by feature values",
+        "comparison_baselines": [
+            "Experiment 3 performance (PR-AUC: 0.227)",
+            "Previous baseline (PR-AUC: 0.245)",
+            "No-skill baseline (PR-AUC: 0.047)"
+        ]
+    },
+    
+    "expected_outputs": {
+        "model_artifacts": [
+            "trained RandomForest model via MLflow",
+            "feature_importance ranking",
+            "precision_recall_curve.html",
+            "roc_curve.html", 
+            "confusion_matrix.html"
+        ],
+        "performance_reports": [
+            "experiment_summary.json with all metrics",
+            "experiment_summary.md with detailed analysis",
+            "threshold_analysis.json with business scenario performance"
+        ],
+        "diagnostic_plots": [
+            "feature_importance.html",
+            "pr_curve_comparison.html comparing to baselines",
+            "error_analysis.html with FP/FN patterns"
+        ]
+    },
+    
+    "success_criteria": {
+        "primary": "PR-AUC >= 0.245 (recover to previous baseline)",
+        "stretch": "PR-AUC >= 0.280 (reach target)",
+        "minimum": "PR-AUC >= 0.227 (no regression from Experiment 3)",
+        "stability": "CV-Test performance gap < 5% (avoid Experiment 3's 21.3% gap)"
+    }
+}

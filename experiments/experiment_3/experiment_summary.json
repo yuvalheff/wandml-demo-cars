@@ -1,0 +1,142 @@
+{
+  "experiment_name": "Feature Selection Enhanced Vehicle Collision Prediction",
+  "iteration": 3,
+  "execution_status": "completed_with_performance_gap",
+  "primary_metric": {
+    "name": "PR-AUC",
+    "value": 0.227,
+    "target": 0.280,
+    "baseline": 0.245,
+    "performance_vs_target": -0.190,
+    "performance_vs_baseline": -0.074
+  },
+  "secondary_metrics": {
+    "roc_auc": 0.810,
+    "model_features": 11,
+    "feature_selection_method": "SelectKBest_f_classif_k15"
+  },
+  "key_findings": {
+    "exploration_production_gap": {
+      "exploration_cv_result": 0.288,
+      "final_result": 0.227,
+      "performance_gap": -0.213,
+      "status": "critical_issue"
+    },
+    "feature_selection_success": {
+      "top_features_identified": [
+        "drive_hours",
+        "miles", 
+        "count_trip",
+        "count_brakes",
+        "count_accelarations",
+        "hours_per_trip",
+        "miles_per_trip"
+      ],
+      "engineered_features_ranking": "top_10",
+      "exposure_features_importance": 0.58
+    },
+    "baseline_regression": {
+      "previous_baseline": 0.245,
+      "current_result": 0.227,
+      "regression_magnitude": -0.074,
+      "implications": "feature_selection_may_remove_important_signal"
+    }
+  },
+  "technical_execution": {
+    "model_algorithm": "RandomForestClassifier",
+    "hyperparameters": {
+      "n_estimators": 200,
+      "max_depth": null,
+      "min_samples_split": 5,
+      "min_samples_leaf": 2
+    },
+    "preprocessing_success": true,
+    "feature_engineering_success": true,
+    "mlflow_integration_success": true,
+    "execution_issues": [
+      "multiple_mlflow_pipeline_errors",
+      "feature_name_mismatch_debugging"
+    ]
+  },
+  "business_impact_assessment": {
+    "high_precision_scenario": {
+      "precision_target": "30%+",
+      "expected_recall": "10-20%",
+      "use_case": "targeted_interventions"
+    },
+    "balanced_f1_scenario": {
+      "expected_precision": "~15%",
+      "expected_recall": "~35%",
+      "use_case": "moderate_alerting_systems"
+    },
+    "high_recall_scenario": {
+      "expected_precision": "8-12%",
+      "recall_target": "60%+",
+      "use_case": "safety_critical_with_high_false_alarms"
+    }
+  },
+  "critical_issues": [
+    {
+      "issue": "exploration_production_performance_gap",
+      "severity": "critical",
+      "description": "21.3% gap between CV exploration (0.288) and final result (0.227)",
+      "potential_causes": [
+        "data_leakage_in_exploration",
+        "overfitting_during_feature_selection",
+        "train_test_distribution_differences"
+      ]
+    },
+    {
+      "issue": "baseline_performance_regression", 
+      "severity": "high",
+      "description": "7.4% performance loss from previous 0.245 baseline",
+      "implication": "feature_selection_too_aggressive"
+    },
+    {
+      "issue": "target_miss_magnitude",
+      "severity": "high", 
+      "description": "19.0% below target performance (0.280 vs 0.227)",
+      "total_expectation_gap": "23.3%"
+    }
+  ],
+  "strengths": [
+    "methodologically_sound_feature_selection",
+    "successful_exposure_based_feature_engineering",
+    "clear_feature_importance_hierarchy",
+    "proper_technical_implementation",
+    "comprehensive_artifact_generation"
+  ],
+  "weaknesses": [
+    "significant_exploration_production_gap",
+    "baseline_performance_regression",
+    "target_performance_miss",
+    "potential_overfitting_issues",
+    "feature_selection_may_be_too_aggressive"
+  ],
+  "future_recommendations": {
+    "immediate_priority": [
+      "diagnose_exploration_production_gap",
+      "validate_cross_validation_methodology",
+      "check_for_data_leakage"
+    ],
+    "alternative_approaches": [
+      "recursive_feature_elimination",
+      "l1_regularization_feature_selection",
+      "boruta_algorithm",
+      "ensemble_methods",
+      "xgboost_with_builtin_selection"
+    ],
+    "methodological_improvements": [
+      "nested_cross_validation",
+      "holdout_validation_set",
+      "time_aware_validation_splits"
+    ]
+  },
+  "lessons_learned": [
+    "strong_statistical_ranking_doesnt_guarantee_performance",
+    "exploration_results_may_not_generalize_to_production",
+    "feature_selection_can_remove_important_interactions",
+    "baseline_maintenance_is_challenging_with_complex_approaches"
+  ],
+  "experiment_status": "performance_target_missed_requires_review"
+}

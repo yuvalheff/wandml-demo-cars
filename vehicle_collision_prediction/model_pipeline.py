@@ -97,9 +97,9 @@ class ModelPipeline:
         # Apply feature engineering
         X_features = self.feature_processor.transform(X_processed)
         
-        # Select numeric features for modeling (exclude non-feature columns but include month dummies)
+        # Select numeric features for modeling (exclude non-feature columns)
         feature_cols = [col for col in X_features.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+                       if col not in ['driver_id', 'collisions', 'collision_binary']]
         X_model_input = X_features[feature_cols].select_dtypes(include=[np.number])
         
         # Ensure consistent feature ordering
@@ -139,9 +139,9 @@ class ModelPipeline:
         # Apply feature engineering
         X_features = self.feature_processor.transform(X_processed)
         
-        # Select numeric features for modeling (exclude non-feature columns but include month dummies)
+        # Select numeric features for modeling (exclude non-feature columns)
         feature_cols = [col for col in X_features.columns 
-                       if col not in ['driver_id', 'collisions', 'collisions_binary']]
+                       if col not in ['driver_id', 'collisions', 'collision_binary']]
         X_model_input = X_features[feature_cols].select_dtypes(include=[np.number])
         
         # Ensure consistent feature ordering

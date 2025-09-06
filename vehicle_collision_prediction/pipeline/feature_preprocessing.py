@@ -4,111 +4,108 @@ import numpy as np
 import pickle
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.feature_selection import SelectKBest, f_classif
 
 from vehicle_collision_prediction.config import FeaturesConfig
 
 
 class FeatureProcessor(BaseEstimator, TransformerMixin):
-    def __init__(self, config: FeaturesConfig, n_features_select: Optional[int] = None):
+    def __init__(self, config: FeaturesConfig):
         self.config: FeaturesConfig = config
-        self.n_features_select = n_features_select or 15  # Default to 15 as per experiment plan
-        self.feature_selector = None
-        self.selected_features = None
+        # No feature selection in Experiment 4 - use all features
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'FeatureProcessor':
         """
         Fit the feature processor to the data.
-        Create exposure-based features then apply SelectKBest feature selection.
+        For Experiment 4: Create 6 enhanced engineered features without feature selection.
 
         Parameters:
         X (pd.DataFrame): The input features.
-        y (Optional[pd.Series]): The target variable (required for SelectKBest).
+        y (Optional[pd.Series]): The target variable (not used in this processor).
 
         Returns:
         FeatureProcessor: The fitted processor.
         """
-        if y is None:
-            raise ValueError("Target variable y is required for fitting feature selector")
-        
-        # First create engineered features
-        X_engineered = self._create_engineered_features(X)
-        
-        # Apply SelectKBest feature selection with f_classif scoring
-        self.feature_selector = SelectKBest(score_func=f_classif, k=self.n_features_select)
-        
-        # Prepare features for selection (exclude target columns)
-        feature_cols = [col for col in X_engineered.columns 
-                       if col not in ['collisions', 'collisions_binary']]
-        
-        X_features = X_engineered[feature_cols]
-        
-        # Fit the feature selector
-        self.feature_selector.fit(X_features, y)
-        
-        # Store selected feature names
-        selected_indices = self.feature_selector.get_support()
-        self.selected_features = [feature_cols[i] for i, selected in enumerate(selected_indices) if selected]
-        
+        # No fitting required for Experiment 4 - just feature engineering without selection
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform the input features by creating engineered features and applying feature selection.
-        Create 5 exposure-based features then select top k=15 features using SelectKBest.
+        Transform the input features by creating 6 enhanced engineered features.
+        Experiment 4 uses ALL features (18 total: 11 original numerical + 1 encoded + 6 engineered).
 
         Parameters:
         X (pd.DataFrame): The input features to transform.
 
         Returns:
-        pd.DataFrame: The transformed features with engineered and selected features.
+        pd.DataFrame: The transformed features with all original + engineered features.
         """
-        # First create engineered features
-        X_engineered = self._create_engineered_features(X)
-        
-        # Apply feature selection if fitted
-        if self.feature_selector is not None and self.selected_features is not None:
-            # Keep target columns if they exist (for consistency during pipeline)
-            target_cols = [col for col in X_engineered.columns 
-                          if col in ['collisions', 'collisions_binary']]
-            
-            # Select only the chosen features plus target columns
-            X_selected = X_engineered[self.selected_features + target_cols]
-            return X_selected
+        # Create enhanced engineered features as per Experiment 4 plan
+        X_engineered = self._create_enhanced_engineered_features(X)
         
         return X_engineered
 
-    def _create_engineered_features(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _create_enhanced_engineered_features(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Create 5 exposure-based features as specified in experiment plan.
+        Create 6 enhanced engineered features as specified in Experiment 4 plan:
+        1) miles_per_trip = miles/count_trip (0 if count_trip == 0)
+        2) hours_per_trip = drive_hours/count_trip (0 if count_trip == 0)
+        3) brakes_per_mile = count_brakes/miles (0 if miles == 0)
+        4) accel_per_mile = count_accelarations/miles (0 if miles == 0)
+        5) speed_ratio = time_speeding_hours/max(drive_hours, 0.001)
+        6) highway_ratio = highway_miles/miles (0 if miles == 0)
+        
+        Note: night_ratio excluded for exactly 6 features as per plan.
         """
         X_transformed = X.copy()
         
-        # Create exposure-based features with small epsilon to avoid division by zero
-        eps = self.config.eps_value  # Use config value: 1e-6 (updated from experiment plan)
-        
-        # 5 exposure-based features as per experiment plan
+        # Exposure ratios (handle zero denominators by setting to 0)
         if 'miles' in X_transformed.columns and 'count_trip' in X_transformed.columns:
-            X_transformed['miles_per_trip'] = X_transformed['miles'] / (X_transformed['count_trip'] + eps)
+            X_transformed['miles_per_trip'] = np.where(
+                X_transformed['count_trip'] == 0, 
+                0, 
+                X_transformed['miles'] / X_transformed['count_trip']
+            )
         
         if 'drive_hours' in X_transformed.columns and 'count_trip' in X_transformed.columns:
-            X_transformed['hours_per_trip'] = X_transformed['drive_hours'] / (X_transformed['count_trip'] + eps)
+            X_transformed['hours_per_trip'] = np.where(
+                X_transformed['count_trip'] == 0, 
+                0, 
+                X_transformed['drive_hours'] / X_transformed['count_trip']
+            )
         
+        # Behavior ratios
         if 'count_brakes' in X_transformed.columns and 'miles' in X_transformed.columns:
-            X_transformed['brakes_per_mile'] = X_transformed['count_brakes'] / (X_transformed['miles'] + eps)
+            X_transformed['brakes_per_mile'] = np.where(
+                X_transformed['miles'] == 0, 
+                0, 
+                X_transformed['count_brakes'] / X_transformed['miles']
+            )
         
         if 'count_accelarations' in X_transformed.columns and 'miles' in X_transformed.columns:
-            X_transformed['accel_per_mile'] = X_transformed['count_accelarations'] / (X_transformed['miles'] + eps)
+            X_transformed['accel_per_mile'] = np.where(
+                X_transformed['miles'] == 0, 
+                0, 
+                X_transformed['count_accelarations'] / X_transformed['miles']
+            )
         
-        if 'maximum_speed' in X_transformed.columns and 'miles' in X_transformed.columns:
-            X_transformed['speed_per_mile'] = X_transformed['maximum_speed'] / (X_transformed['miles'] + eps)
+        # Risk ratios (using max(drive_hours, 0.001) to avoid division by zero)
+        if 'time_speeding_hours' in X_transformed.columns and 'drive_hours' in X_transformed.columns:
+            X_transformed['speed_ratio'] = X_transformed['time_speeding_hours'] / np.maximum(X_transformed['drive_hours'], 0.001)
         
-        # Replace infinite values with NaN and fill with 0
-        feature_cols = ['miles_per_trip', 'hours_per_trip', 'brakes_per_mile', 'accel_per_mile', 'speed_per_mile']
-        existing_feature_cols = [col for col in feature_cols if col in X_transformed.columns]
+        if 'highway_miles' in X_transformed.columns and 'miles' in X_transformed.columns:
+            X_transformed['highway_ratio'] = np.where(
+                X_transformed['miles'] == 0, 
+                0, 
+                X_transformed['highway_miles'] / X_transformed['miles']
+            )
         
-        for col in existing_feature_cols:
-            X_transformed[col] = X_transformed[col].replace([np.inf, -np.inf], np.nan).fillna(0)
+        # Replace any infinite values that might have occurred  
+        engineered_cols = ['miles_per_trip', 'hours_per_trip', 'brakes_per_mile', 'accel_per_mile', 
+                          'speed_ratio', 'highway_ratio']
+        existing_engineered_cols = [col for col in engineered_cols if col in X_transformed.columns]
+        
+        for col in existing_engineered_cols:
+            X_transformed[col] = X_transformed[col].replace([np.inf, -np.inf], 0).fillna(0)
         
         return X_transformed
 
